@@ -9,7 +9,7 @@ interface TeamLogoProps {
   className?: string;
 }
 
-const TeamLogo = ({ abbr, size = 24, darkBg = false, className = '' }: TeamLogoProps) => (
+const TeamLogo = ({ abbr, size = 24, darkBg = true, className = '' }: TeamLogoProps) => (
   <img
     src={getTeamLogoUrl(abbr, darkBg)}
     alt={abbr}

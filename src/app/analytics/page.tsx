@@ -53,7 +53,7 @@ const TeamLogoDot = (props: unknown) => {
     <g style={{ cursor: 'pointer' }}>
       <circle cx={cx} cy={cy} r={size / 2 + 3} fill="white" stroke="#27272a" strokeWidth={1} />
       <image
-        href={getTeamLogoUrl(payload.abbr)}
+        href={getTeamLogoUrl(payload.abbr, true)}
         x={cx - size / 2}
         y={cy - size / 2}
         width={size}
