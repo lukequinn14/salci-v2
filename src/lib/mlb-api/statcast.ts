@@ -36,7 +36,8 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 export const fetchStatcastCSV = async (
   playerId: number,
   startDate: string,
-  endDate: string
+  endDate: string,
+  timeoutMs = 8000
 ): Promise<StatcastRow[]> => {
   const params = new URLSearchParams({
     player_type: 'pitcher',
@@ -46,15 +47,24 @@ export const fetchStatcastCSV = async (
     type: 'details',
   });
 
-  const res = await fetch(`${SAVANT_CSV}?${params}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0' },
-    next: { revalidate: 3600 },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!res.ok) return [];
+  try {
+    const res = await fetch(`${SAVANT_CSV}?${params}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      next: { revalidate: 3600 },
+      signal: controller.signal,
+    });
 
-  const text = await res.text();
-  return parseCSV(text);
+    if (!res.ok) return [];
+    const text = await res.text();
+    return parseCSV(text);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 const parseCSV = (csv: string): StatcastRow[] => {

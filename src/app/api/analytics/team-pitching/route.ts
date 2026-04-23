@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getAllTeamPitchingStats } from '@/lib/mlb-api/statsapi';
 import type { TeamPitchingStats, DateRange } from '@/types/results';
 
+export const revalidate = 3600;
+
 const FIP_CONSTANT = 3.10;
 
 const computeFip = (strikeOuts: number, baseOnBalls: number, homeRuns: number, ip: number): number => {
