@@ -152,28 +152,26 @@ export default function AnalyticsPage() {
 
   // ── data fetching ─────────────────────────────────────────────────────────
 
-  const fetchTeams = useCallback((r: DateRange) => {
+  // Single effect for team stats — fires on mount and whenever range changes.
+  // Uses functional setSelectedTeams so prev is always current, not stale closure.
+  useEffect(() => {
     setTeamsLoading(true);
-    fetch(`/api/analytics/team-pitching?range=${r}`)
+    fetch(`/api/analytics/team-pitching?range=${range}`)
       .then((res) => res.json() as Promise<{ teams: TeamPitchingStats[] }>)
       .then(({ teams }) => {
         setAllTeams(teams);
-        if (selectedTeams.size === 0) {
-          const top = [...teams]
-            .sort((a, b) => b.kPct - a.kPct)
-            .slice(0, 5)
-            .map((t) => t.abbr);
-          setSelectedTeams(new Set(top));
-        }
+        setSelectedTeams((prev) =>
+          prev.size === 0
+            ? new Set([...teams].sort((a, b) => b.kPct - a.kPct).slice(0, 5).map((t) => t.abbr))
+            : prev
+        );
       })
       .catch(() => {})
       .finally(() => setTeamsLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [range]);
 
+  // L14 trend data — mount only
   useEffect(() => {
-    fetchTeams(range);
-    // Also fetch L14 for trend badges
     fetch('/api/analytics/team-pitching?range=14d')
       .then((res) => res.json() as Promise<{ teams: TeamPitchingStats[] }>)
       .then(({ teams }) => {
@@ -182,10 +180,7 @@ export default function AnalyticsPage() {
         setL14Map(map);
       })
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => { fetchTeams(range); }, [range, fetchTeams]);
 
   const fetchPitchers = useCallback(() => {
     if (pitchersFetched) return;

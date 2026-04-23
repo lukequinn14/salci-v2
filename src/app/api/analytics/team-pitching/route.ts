@@ -21,6 +21,9 @@ export const GET = async (request: Request): Promise<NextResponse> => {
     return NextResponse.json({ teams: [], range, updatedAt: new Date().toISOString() });
   }
 
+  // Debug: log first 5 abbreviations from MLB Stats API so we can verify they match ESPN_SLUG keys
+  console.log('[Analytics] First 5 team abbrs from MLB API:', rawStats.slice(0, 5).map((t) => t.abbr));
+
   const teams: TeamPitchingStats[] = rawStats.map((t) => ({
     teamId: t.teamId,
     team: t.teamName,
