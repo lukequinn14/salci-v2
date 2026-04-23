@@ -9,6 +9,12 @@ const ESPN_SLUG: Record<string, string> = {
 
 const DARK_BG_TEAMS = new Set(['COL', 'SD', 'NYY', 'MIN', 'KC', 'PIT', 'MIL', 'CWS', 'SF']);
 
+// Aliases: non-standard abbreviations that arrive from external sources
+const ABBREV_ALIASES: Record<string, string> = {
+  AZ: 'ARI',
+  az: 'ARI',
+};
+
 // Explicit URL overrides for teams where the standard scoreboard path is unreliable
 const URL_OVERRIDES: Record<string, { standard: string; dark: string }> = {
   ARI: {
@@ -18,11 +24,13 @@ const URL_OVERRIDES: Record<string, { standard: string; dark: string }> = {
 };
 
 export const getTeamLogoUrl = (abbr: string, darkBg = false): string => {
-  const upper = abbr.toUpperCase();
+  if (!abbr) return '';
+  const resolved = ABBREV_ALIASES[abbr] ?? abbr;
+  const upper = resolved.toUpperCase();
   const override = URL_OVERRIDES[upper];
   if (override) return darkBg ? override.dark : override.standard;
 
-  const slug = ESPN_SLUG[upper] ?? abbr.toLowerCase();
+  const slug = ESPN_SLUG[upper] ?? resolved.toLowerCase();
   const variant = darkBg && DARK_BG_TEAMS.has(upper) ? '500-dark' : '500/scoreboard';
   return `https://a.espncdn.com/i/teamlogos/mlb/${variant}/${slug}.png`;
 };
