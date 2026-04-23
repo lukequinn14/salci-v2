@@ -37,7 +37,8 @@ export const fetchStatcastCSV = async (
   playerId: number,
   startDate: string,
   endDate: string,
-  timeoutMs = 8000
+  timeoutMs = 8000,
+  pitcherName?: string
 ): Promise<StatcastRow[]> => {
   const params = new URLSearchParams({
     player_type: 'pitcher',
@@ -52,15 +53,25 @@ export const fetchStatcastCSV = async (
 
   try {
     const res = await fetch(`${SAVANT_CSV}?${params}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': 'https://baseballsavant.mlb.com/',
+      },
       next: { revalidate: 3600 },
       signal: controller.signal,
     });
 
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(`[Statcast] ${pitcherName ?? `Player ${playerId}`}: HTTP ${res.status} ${res.statusText}`);
+      return [];
+    }
     const text = await res.text();
     return parseCSV(text);
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[Statcast] ${pitcherName ?? `Player ${playerId}`}: ${message}`);
     return [];
   } finally {
     clearTimeout(timer);

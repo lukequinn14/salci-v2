@@ -68,7 +68,7 @@ export const GET = async (): Promise<NextResponse> => {
       bookLine = cached.book_line ?? 5.5;
     } else {
       // Compute from Statcast
-      const rows = await fetchStatcastCSV(start.pitcher.id, twoDaysAgo, yesterday);
+      const rows = await fetchStatcastCSV(start.pitcher.id, twoDaysAgo, yesterday, 8000, start.pitcher.fullName);
       bookLine = await getBookLineForPitcher(start.pitcher.fullName);
 
       let stuffPlus = 100;

@@ -128,7 +128,7 @@ const computeLivePitcher = async (
 
   // Live Statcast — fetchStatcastCSV has its own 8s AbortController timeout
   const [rows, bookLine] = await Promise.all([
-    fetchStatcastCSV(start.pitcher.id, daysAgo(30), gameDate),
+    fetchStatcastCSV(start.pitcher.id, daysAgo(30), gameDate, 8000, start.pitcher.fullName),
     getBookLineForPitcher(start.pitcher.fullName),
   ]);
 

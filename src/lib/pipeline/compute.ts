@@ -1,11 +1,4 @@
-import { getTodayStarters, type ScheduledStart } from '@/lib/mlb-api/statsapi';
-import {
-  fetchStatcastCSV,
-  computeArsenal,
-  computeStuffPlusFromArsenal,
-  computeLocationPlus,
-  computeCswPct,
-} from '@/lib/mlb-api/statcast';
+import { getTodayStarters, getPitcherSeasonStats, getPitcherLastNGames, type ScheduledStart } from '@/lib/mlb-api/statsapi';
 import { computeSalci } from '@/lib/salci/scoring';
 import { getBookLineForPitcher } from '@/lib/odds/fetcher';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -17,32 +10,44 @@ export interface PipelineResult {
   computedAt: string;
 }
 
-const daysAgo = (n: number): string => {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-};
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+const deriveStuffPlus = (k9: number): number =>
+  clamp(100 + ((k9 - 8.5) / 0.8) * 10, 70, 140);
+
+const deriveLocationPlus = (whip: number): number =>
+  clamp(100 + (1 - whip / 1.3) * 20, 75, 125);
+
+const deriveCswPct = (strikeOuts: number, battersFaced: number): number =>
+  battersFaced > 0
+    ? clamp((strikeOuts / battersFaced) / 0.29, 0.20, 0.38)
+    : 0.29;
 
 const computeAndStore = async (
   start: ScheduledStart,
   gameDate: string,
   supabase: ReturnType<typeof createServiceClient>
 ): Promise<boolean> => {
-  const [rows, bookLine] = await Promise.all([
-    fetchStatcastCSV(start.pitcher.id, daysAgo(30), gameDate),
+  const [seasonStats, recentLog, bookLine] = await Promise.all([
+    getPitcherSeasonStats(start.pitcher.id),
+    getPitcherLastNGames(start.pitcher.id, 5),
     getBookLineForPitcher(start.pitcher.fullName),
   ]);
 
-  let stuffPlus = 100;
-  let locationPlus = 100;
-  let cswPct = 0.29;
+  // Proxy inputs derived from MLB Stats API — no Statcast needed
+  const k9 = seasonStats?.k9 ?? recentLog.avgK9;
+  const whip = seasonStats?.whip ?? 1.3;
+  const strikeOuts = seasonStats?.strikeOuts ?? 0;
+  const battersFaced = seasonStats?.battersFaced ?? 1;
 
-  if (rows.length > 0) {
-    cswPct = computeCswPct(rows);
-    const arsenal = computeArsenal(rows);
-    stuffPlus = computeStuffPlusFromArsenal(arsenal, cswPct);
-    locationPlus = computeLocationPlus(rows);
-  }
+  const stuffPlus = deriveStuffPlus(k9);
+  const locationPlus = deriveLocationPlus(whip);
+  const cswPct = deriveCswPct(strikeOuts, battersFaced);
+
+  // Use recent game log for workload inputs
+  const pPerIP = recentLog.avgPitchesPerIP > 0 ? recentLog.avgPitchesPerIP : 16;
+  const projectedIP = recentLog.avgIP > 0 ? recentLog.avgIP : 5.5;
+  const projectedBF = Math.round(projectedIP * 4.0);
 
   const salci = computeSalci({
     stuffPlus,
@@ -51,8 +56,8 @@ const computeAndStore = async (
     oppKPct: 0.22,
     oppZoneContact: 0.82,
     sameSidePct: 0.5,
-    pPerIP: 16,
-    projectedBF: 21,
+    pPerIP,
+    projectedBF,
     managerLeash: 70,
     tttKDrop: 1,
     bookLine,
@@ -70,6 +75,9 @@ const computeAndStore = async (
         stuff_plus: stuffPlus,
         location_plus: locationPlus,
         csw_pct: cswPct,
+        era: seasonStats?.era ?? null,
+        whip: seasonStats?.whip ?? null,
+        k_per_9: k9,
         updated_at: computedAt,
       },
       { onConflict: 'id' }
@@ -98,6 +106,13 @@ const computeAndStore = async (
     ),
   ]);
 
+  if (pitcherUpsert.error) {
+    console.error(`[Pipeline] ${start.pitcher.fullName}: pitcher upsert failed —`, pitcherUpsert.error.message);
+  }
+  if (scoreUpsert.error) {
+    console.error(`[Pipeline] ${start.pitcher.fullName}: score upsert failed —`, scoreUpsert.error.message);
+  }
+
   return !pitcherUpsert.error && !scoreUpsert.error;
 };
 
@@ -108,7 +123,8 @@ export const runSalciPipeline = async (gameDate: string): Promise<PipelineResult
   let computed = 0;
   let failed = 0;
 
-  const BATCH_SIZE = 3;
+  // MLB Stats API is fast — can safely run 6 at a time
+  const BATCH_SIZE = 6;
   for (let i = 0; i < starters.length; i += BATCH_SIZE) {
     const batch = starters.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(

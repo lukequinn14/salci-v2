@@ -270,3 +270,121 @@ export const getAllTeamPitchingStats = async (
     whip: t.inningsPitched > 0 ? (t.baseOnBalls + t.hits) / t.inningsPitched : 0,
   }));
 };
+
+export interface PitcherSeasonStats {
+  era: number;
+  whip: number;
+  strikeOuts: number;
+  inningsPitched: number;
+  battersFaced: number;
+  homeRuns: number;
+  baseOnBalls: number;
+  hits: number;
+  gamesStarted: number;
+  k9: number;
+}
+
+export const getPitcherSeasonStats = async (
+  pitcherId: number
+): Promise<PitcherSeasonStats | null> => {
+  const url = `${BASE}/people/${pitcherId}/stats?stats=season&group=pitching&season=2026`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as {
+    stats: Array<{
+      splits: Array<{
+        stat: {
+          era?: string;
+          whip?: string;
+          strikeOuts?: number;
+          inningsPitched?: string;
+          battersFaced?: number;
+          homeRuns?: number;
+          baseOnBalls?: number;
+          hits?: number;
+          gamesStarted?: number;
+        };
+      }>;
+    }>;
+  };
+
+  const split = data.stats?.[0]?.splits?.[0]?.stat;
+  if (!split) return null;
+
+  const ip = parseIP(split.inningsPitched);
+  const k9 = ip > 0 ? ((split.strikeOuts ?? 0) * 9) / ip : 0;
+
+  return {
+    era: parseFloat(split.era ?? '0') || 0,
+    whip: parseFloat(split.whip ?? '0') || 0,
+    strikeOuts: split.strikeOuts ?? 0,
+    inningsPitched: ip,
+    battersFaced: split.battersFaced ?? 0,
+    homeRuns: split.homeRuns ?? 0,
+    baseOnBalls: split.baseOnBalls ?? 0,
+    hits: split.hits ?? 0,
+    gamesStarted: split.gamesStarted ?? 0,
+    k9,
+  };
+};
+
+export interface RecentGameLog {
+  avgK9: number;
+  avgIP: number;
+  avgPitchesPerIP: number;
+  gamesBack: number;
+}
+
+export const getPitcherLastNGames = async (
+  pitcherId: number,
+  n: number
+): Promise<RecentGameLog> => {
+  const url = `${BASE}/people/${pitcherId}/stats?stats=gameLog&group=pitching&season=2026`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+
+  const fallback: RecentGameLog = { avgK9: 8.5, avgIP: 5.5, avgPitchesPerIP: 16, gamesBack: 0 };
+  if (!res.ok) return fallback;
+
+  const data = (await res.json()) as {
+    stats: Array<{
+      splits: Array<{
+        stat: {
+          strikeOuts?: number;
+          inningsPitched?: string;
+          numberOfPitches?: number;
+        };
+      }>;
+    }>;
+  };
+
+  const splits = data.stats?.[0]?.splits ?? [];
+  const recent = splits.slice(-n);
+  if (recent.length === 0) return fallback;
+
+  let totalK9 = 0;
+  let totalIP = 0;
+  let totalPitches = 0;
+  let validGames = 0;
+
+  for (const game of recent) {
+    const s = game.stat;
+    const ip = parseIP(s.inningsPitched);
+    if (ip === 0) continue;
+    const k9 = ((s.strikeOuts ?? 0) * 9) / ip;
+    const pPerIP = (s.numberOfPitches ?? 0) / ip;
+    totalK9 += k9;
+    totalIP += ip;
+    totalPitches += pPerIP;
+    validGames++;
+  }
+
+  if (validGames === 0) return fallback;
+
+  return {
+    avgK9: totalK9 / validGames,
+    avgIP: totalIP / validGames,
+    avgPitchesPerIP: totalPitches / validGames,
+    gamesBack: validGames,
+  };
+};
