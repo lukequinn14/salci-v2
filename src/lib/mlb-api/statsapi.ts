@@ -27,7 +27,7 @@ export interface ScheduledStart {
 
 export const getTodayStarters = async (date?: string): Promise<ScheduledStart[]> => {
   const gameDate = date ?? new Date().toISOString().slice(0, 10);
-  const url = `${BASE}/schedule?sportId=1&date=${gameDate}&hydrate=probablePitcher`;
+  const url = `${BASE}/schedule?sportId=1&date=${gameDate}&hydrate=probablePitcher,team`;
 
   const res = await fetch(url, { next: { revalidate: 3600 } });
   if (!res.ok) return [];
@@ -49,9 +49,9 @@ export const getTodayStarters = async (date?: string): Promise<ScheduledStart[]>
         gameDate,
         pitcher: awayPitcher,
         team: game.teams.away.team.name,
-        teamAbbr: game.teams.away.team.abbreviation,
+        teamAbbr: game.teams.away.team.abbreviation || game.teams.away.team.name.slice(0, 3).toUpperCase(),
         opponent: game.teams.home.team.name,
-        opponentAbbr: game.teams.home.team.abbreviation,
+        opponentAbbr: game.teams.home.team.abbreviation || game.teams.home.team.name.slice(0, 3).toUpperCase(),
         isHome: false,
       });
     }
@@ -61,9 +61,9 @@ export const getTodayStarters = async (date?: string): Promise<ScheduledStart[]>
         gameDate,
         pitcher: homePitcher,
         team: game.teams.home.team.name,
-        teamAbbr: game.teams.home.team.abbreviation,
+        teamAbbr: game.teams.home.team.abbreviation || game.teams.home.team.name.slice(0, 3).toUpperCase(),
         opponent: game.teams.away.team.name,
-        opponentAbbr: game.teams.away.team.abbreviation,
+        opponentAbbr: game.teams.away.team.abbreviation || game.teams.away.team.name.slice(0, 3).toUpperCase(),
         isHome: true,
       });
     }

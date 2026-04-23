@@ -65,8 +65,10 @@ const computeAndStore = async (
 
   const computedAt = new Date().toISOString();
 
-  const [pitcherUpsert, scoreUpsert] = await Promise.all([
-    supabase.from('pitchers').upsert(
+  // Pitcher row must exist before score row (FK constraint) — run sequentially
+  const pitcherUpsert = await supabase
+    .from('pitchers')
+    .upsert(
       {
         id: start.pitcher.id,
         name: start.pitcher.fullName,
@@ -81,39 +83,43 @@ const computeAndStore = async (
         updated_at: computedAt,
       },
       { onConflict: 'id' }
-    ),
-    supabase.from('daily_salci_scores').upsert(
-      {
-        pitcher_id: start.pitcher.id,
-        game_date: gameDate,
-        salci_total: salci.total,
-        stuff_score: salci.stuff,
-        location_score: salci.location,
-        matchup_score: salci.matchup,
-        workload_score: salci.workload,
-        grade: salci.grade,
-        floor_ks: salci.floor,
-        ceiling_ks: salci.ceiling,
-        expected_ks: salci.expectedKs,
-        buffer: salci.buffer,
-        recommend_over: salci.recommendOver,
-        book_line: bookLine,
-        opponent: start.opponentAbbr,
-        is_home: start.isHome,
-        computed_at: computedAt,
-      },
-      { onConflict: 'pitcher_id,game_date' }
-    ),
-  ]);
+    )
+    .select('id')
+    .single();
 
   if (pitcherUpsert.error) {
     console.error(`[Pipeline] ${start.pitcher.fullName}: pitcher upsert failed —`, pitcherUpsert.error.message);
+    return false;
   }
+
+  const scoreUpsert = await supabase.from('daily_salci_scores').upsert(
+    {
+      pitcher_id: start.pitcher.id,
+      game_date: gameDate,
+      salci_total: salci.total,
+      stuff_score: salci.stuff,
+      location_score: salci.location,
+      matchup_score: salci.matchup,
+      workload_score: salci.workload,
+      grade: salci.grade,
+      floor_ks: salci.floor,
+      ceiling_ks: salci.ceiling,
+      expected_ks: salci.expectedKs,
+      buffer: salci.buffer,
+      recommend_over: salci.recommendOver,
+      book_line: bookLine,
+      opponent: start.opponentAbbr,
+      is_home: start.isHome,
+      computed_at: computedAt,
+    },
+    { onConflict: 'pitcher_id,game_date' }
+  );
+
   if (scoreUpsert.error) {
     console.error(`[Pipeline] ${start.pitcher.fullName}: score upsert failed —`, scoreUpsert.error.message);
   }
 
-  return !pitcherUpsert.error && !scoreUpsert.error;
+  return !scoreUpsert.error;
 };
 
 export const runSalciPipeline = async (gameDate: string): Promise<PipelineResult> => {
