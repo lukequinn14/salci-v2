@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/compute-salci",
+      "schedule": "0 9 * * *"
+    }
+  ],
   "functions": {
     "src/app/api/**": {
       "maxDuration": 30

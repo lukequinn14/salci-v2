@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
+import { RefreshCw } from 'lucide-react';
 import PitcherCard from '@/components/pitcher/PitcherCard';
 import YesterdayResultCard from '@/components/pitcher/YesterdayResultCard';
 import Spinner from '@/components/ui/Spinner';
@@ -10,8 +11,15 @@ import type { YesterdayResult } from '@/types/results';
 
 type Tab = 'today' | 'yesterday';
 
-interface PitchersResponse { pitchers: Pitcher[]; gameDate: string }
+interface PitchersResponse {
+  pitchers: Pitcher[];
+  gameDate: string;
+  lastUpdated: string | null;
+  source: 'cache' | 'live';
+}
 interface YesterdayResponse { results: YesterdayResult[]; gameDate: string }
+
+const isDev = process.env.NODE_ENV === 'development';
 
 const EmptyState = ({ message, sub }: { message: string; sub: string }) => (
   <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 py-20 text-center">
@@ -32,7 +40,12 @@ export default function PitchersPage() {
   const [yesterdayError, setYesterdayError] = useState<string | null>(null);
   const [yesterdayFetched, setYesterdayFetched] = useState(false);
 
-  useEffect(() => {
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
+
+  const fetchToday = () => {
+    setTodayLoading(true);
+    setTodayError(null);
     fetch('/api/pitchers')
       .then((r) => {
         if (!r.ok) throw new Error('Failed to load pitchers');
@@ -41,7 +54,9 @@ export default function PitchersPage() {
       .then(setTodayData)
       .catch((e: unknown) => setTodayError(e instanceof Error ? e.message : 'Unknown error'))
       .finally(() => setTodayLoading(false));
-  }, []);
+  };
+
+  useEffect(fetchToday, []);
 
   const handleYesterdayTab = () => {
     setTab('yesterday');
@@ -60,21 +75,59 @@ export default function PitchersPage() {
       });
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setRefreshMsg(null);
+    try {
+      const res = await fetch('/api/cron/trigger', { method: 'POST' });
+      const data = (await res.json()) as { computed?: number; failed?: number; error?: string };
+      if (data.error) {
+        setRefreshMsg(`Error: ${data.error}`);
+      } else {
+        setRefreshMsg(`Done — ${data.computed} computed, ${data.failed} failed`);
+        fetchToday();
+      }
+    } catch {
+      setRefreshMsg('Request failed');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const winsToday = yesterdayData?.results.filter((r) => r.result === 'win').length ?? 0;
   const betsToday = yesterdayData?.results.filter((r) => r.recommendOver).length ?? 0;
 
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-100 md:text-3xl">
-          Starting Pitchers
-        </h1>
-        <p className="text-sm text-zinc-500">
-          {tab === 'today'
-            ? `Ranked by SALCI score · ${todayData?.gameDate ?? '…'}`
-            : `Yesterday's predictions vs results · ${yesterdayData?.gameDate ?? '…'}`}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-100 md:text-3xl">
+            Starting Pitchers
+          </h1>
+          <p className="text-sm text-zinc-500">
+            {tab === 'today'
+              ? `Ranked by SALCI score · ${todayData?.gameDate ?? '…'}${todayData?.source === 'cache' ? ' · cached' : ''}`
+              : `Yesterday's predictions vs results · ${yesterdayData?.gameDate ?? '…'}`}
+          </p>
+        </div>
+
+        {/* Dev-only refresh button */}
+        {isDev && (
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200 disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+              {refreshing ? 'Computing…' : 'Refresh data'}
+            </button>
+            {refreshMsg && (
+              <span className="text-xs text-zinc-500">{refreshMsg}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tab bar */}
@@ -83,9 +136,7 @@ export default function PitchersPage() {
           onClick={() => setTab('today')}
           className={clsx(
             'rounded-md px-4 py-1.5 text-sm font-semibold transition-colors',
-            tab === 'today'
-              ? 'bg-zinc-800 text-zinc-100'
-              : 'text-zinc-500 hover:text-zinc-300'
+            tab === 'today' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
           )}
         >
           Today
@@ -94,16 +145,12 @@ export default function PitchersPage() {
           onClick={handleYesterdayTab}
           className={clsx(
             'rounded-md px-4 py-1.5 text-sm font-semibold transition-colors',
-            tab === 'yesterday'
-              ? 'bg-zinc-800 text-zinc-100'
-              : 'text-zinc-500 hover:text-zinc-300'
+            tab === 'yesterday' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
           )}
         >
           Yesterday
           {yesterdayData && betsToday > 0 && (
-            <span className="ml-1.5 text-xs text-zinc-500">
-              {winsToday}/{betsToday}
-            </span>
+            <span className="ml-1.5 text-xs text-zinc-500">{winsToday}/{betsToday}</span>
           )}
         </button>
       </div>
@@ -112,16 +159,14 @@ export default function PitchersPage() {
       {tab === 'today' && (
         <>
           {todayLoading && (
-            <div className="flex items-center justify-center py-20">
-              <Spinner size="lg" />
-            </div>
+            <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
           )}
           {todayError && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
               {todayError}
             </div>
           )}
-          {todayData?.pitchers.length === 0 && (
+          {!todayLoading && todayData?.pitchers.length === 0 && (
             <EmptyState
               message="No starters scheduled today"
               sub="Check back when games are on the board"
@@ -141,26 +186,21 @@ export default function PitchersPage() {
       {tab === 'yesterday' && (
         <>
           {yesterdayLoading && (
-            <div className="flex items-center justify-center py-20">
-              <Spinner size="lg" />
-            </div>
+            <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
           )}
           {yesterdayError && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
               {yesterdayError}
             </div>
           )}
-
-          {yesterdayData && yesterdayData.results.length === 0 && (
+          {!yesterdayLoading && yesterdayData?.results.length === 0 && (
             <EmptyState
               message="No results from yesterday"
               sub="No games were scheduled or data isn't available yet"
             />
           )}
-
           {yesterdayData && yesterdayData.results.length > 0 && (
             <>
-              {/* Summary row */}
               {betsToday > 0 && (
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
@@ -181,7 +221,6 @@ export default function PitchersPage() {
                   </div>
                 </div>
               )}
-
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {yesterdayData.results.map((result) => (
                   <YesterdayResultCard key={result.pitcherId} result={result} />
