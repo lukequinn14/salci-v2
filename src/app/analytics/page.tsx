@@ -393,8 +393,12 @@ export default function AnalyticsPage() {
 
               {/* Team chips with trend badges */}
               <div className="flex flex-col gap-2">
-                {/* Debug: log abbrs to confirm MLB API format */}
-                {allTeams.length > 0 && (() => { console.log('[Analytics] team abbrs:', allTeams.slice(0, 5).map((t) => t.abbr)); return null; })()}
+                {/* Visible debug strip — remove once abbr mapping is confirmed */}
+                {allTeams.length > 0 && (
+                  <p className="text-[10px] text-zinc-700 font-mono">
+                    abbrs: {allTeams.slice(0, 8).map((t) => t.abbr).join(', ')}
+                  </p>
+                )}
                 <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
                   {chartType === 'bar' ? 'Click team to highlight' : 'Click team to drill down pitchers'}
                   {focusTeam && <span className="ml-2 text-emerald-400">Showing {focusTeam} pitchers ↓</span>}
