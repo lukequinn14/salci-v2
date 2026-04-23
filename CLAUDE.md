@@ -143,29 +143,46 @@ Logo rendering in JSX (always wrap in a white circle for visibility):
 </div>
 ````
 
-SALCI Scoring Formula
-Port from Python — weights are K-optimized:
-const SALCI_WEIGHTS = {
-stuff:    0.40,
-matchup:  0.25,
-workload: 0.20,
-location: 0.15,
-} as const;interface SalciScore {
-stuff: number;       // 0-100
-location: number;    // 0-100
-matchup: number;     // 0-100
-workload: number;    // 0-100
-total: number;       // 0-100 weighted sum
-grade: 'A' | 'B' | 'C' | 'D' | 'F';
-floor: number;       // projected K floor
-ceiling: number;     // projected K ceiling
-recommendOver: boolean; // true when floor >= bookLine + 2
+## SALCI v4 Scoring Formula
+
+Weights (stuff-dominant, location intentionally de-weighted):
+```
+stuff:    0.52  — whiff power, arsenal quality, CSW%
+matchup:  0.30  — opponent K-propensity + zone contact
+workload: 0.10  — opportunity ceiling (projected IP)
+location: 0.08  — penalized: extreme command = pitching to contact, not whiffs
+```
+
+Key insight: high command HURTS strikeout prediction. The model rewards aggressive,
+stuff-heavy pitchers over fine command guys.
+
+SalciScore interface:
+```typescript
+interface SalciScore {
+  stuff: number;        // normalized 6-97
+  location: number;     // normalized 35-65 (capped upside)
+  matchup: number;      // normalized 15-90
+  workload: number;     // normalized 20-85
+  total: number;        // final SALCI, clamped 10-95
+  grade: 'S' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F';
+  floor: number;        // projected K floor
+  ceiling: number;      // projected K ceiling
+  expectedKs: number;   // Poisson-based mean K projection
+  buffer: number;       // volatility buffer (stuff/location gap)
+  recommendOver: boolean; // floor >= bookLine + 2
 }
+```
 
 Floor-minus-2 rule (core, non-negotiable):
-Recommend strikeout over when salciFloor >= bookLine + 2
+Recommend strikeout over when floor >= bookLine + 2
 
-Grade thresholds: A=80+, B=65-79, C=50-64, D=35-49, F=below 35
+Grade thresholds (v4):
+S=80+, A=70-79, B+=60-69, B=52-59, C=44-51, D=35-43, F=<35
+
+Volatility buffer (stuff-location gap drives floor/ceiling spread):
+gap>22→2.1, gap>15→1.75, gap>8→1.40, gap<-15→0.80, gap<-8→0.95, else→1.15
+
+See src/lib/salci/scoring.ts for full sigmoid normalization math.
 
 ---
 
