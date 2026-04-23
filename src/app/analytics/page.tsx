@@ -11,6 +11,7 @@ import Spinner from '@/components/ui/Spinner';
 import RadarCompare from '@/components/analytics/RadarCompare';
 import ParlayCardGenerator from '@/components/analytics/ParlayCardGenerator';
 import { getTeamLogoUrl } from '@/lib/mlb-api/logos';
+import TeamLogo from '@/components/ui/TeamLogo';
 import { GRADE_COLORS, GRADE_BG_COLORS } from '@/lib/salci/grades';
 import type { TeamPitchingStats, PitchingMetric, DateRange } from '@/types/results';
 import type { Pitcher } from '@/types/pitcher';
@@ -206,10 +207,8 @@ export default function AnalyticsPage() {
     return [...allTeams].sort((a, b) => m.lowerIsBetter ? a[metric] - b[metric] : b[metric] - a[metric]);
   }, [allTeams, metric]);
 
-  const chartTeams = useMemo(() => {
-    const teams = sortedTeams.filter((t) => selectedTeams.has(t.abbr));
-    return teams.length > 0 ? teams : sortedTeams.slice(0, 5);
-  }, [sortedTeams, selectedTeams]);
+  // Bar chart always shows all teams — chips are a highlight tool, not a filter
+  const chartTeams = sortedTeams;
 
   const scatterData = useMemo(() =>
     allTeams.map((t) => ({ x: t.kPct, y: t.era, z: Math.max(t.inningsPitched, 10), abbr: t.abbr, team: t.team })),
@@ -394,38 +393,26 @@ export default function AnalyticsPage() {
 
               {/* Team chips with trend badges */}
               <div className="flex flex-col gap-2">
+                {/* Debug: log abbrs to confirm MLB API format */}
+                {allTeams.length > 0 && (() => { console.log('[Analytics] team abbrs:', allTeams.slice(0, 5).map((t) => t.abbr)); return null; })()}
                 <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
-                  {chartType === 'bar' ? 'Select teams to compare' : 'Click team to drill down pitchers'}
+                  {chartType === 'bar' ? 'Click team to highlight' : 'Click team to drill down pitchers'}
                   {focusTeam && <span className="ml-2 text-emerald-400">Showing {focusTeam} pitchers ↓</span>}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {sortedTeams.map((team) => {
-                    const isSelected = selectedTeams.has(team.abbr);
                     const isFocused = focusTeam === team.abbr;
                     return (
                       <button key={team.abbr}
-                        onClick={() => {
-                          if (chartType === 'bar') {
-                            setSelectedTeams((prev) => {
-                              const next = new Set(prev);
-                              next.has(team.abbr) ? next.delete(team.abbr) : next.add(team.abbr);
-                              return next;
-                            });
-                          } else {
-                            handleTeamClick(team.abbr);
-                          }
-                        }}
+                        onClick={() => handleTeamClick(team.abbr)}
                         className={clsx(
                           'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
-                          isFocused ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300' :
-                          isSelected && chartType === 'bar' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' :
-                          'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                          isFocused
+                            ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
+                            : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
                         )}
                       >
-                        <div className="flex items-center justify-center bg-white rounded-full w-4 h-4">
-                          <img src={getTeamLogoUrl(team.abbr)} alt={team.abbr} className="w-3 h-3 object-contain"
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                        </div>
+                        <TeamLogo abbr={team.abbr} size={14} />
                         {team.abbr}
                         {trendBadge(team.abbr)}
                         <span className="text-zinc-600">{METRIC_FMT[metric](team[metric])}</span>
@@ -497,10 +484,7 @@ export default function AnalyticsPage() {
                           <td className="px-4 py-2.5 text-xs text-zinc-600">{i + 1}</td>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2">
-                              <div className="flex items-center justify-center bg-white rounded-full w-5 h-5">
-                                <img src={getTeamLogoUrl(team.abbr)} alt={team.abbr} className="w-4 h-4 object-contain"
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                              </div>
+                              <TeamLogo abbr={team.abbr} size={16} />
                               <span className={clsx('text-xs font-semibold',
                                 focusTeam === team.abbr ? 'text-emerald-400' : 'text-zinc-300')}>
                                 {team.abbr}
@@ -591,10 +575,7 @@ export default function AnalyticsPage() {
                           'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
                         )}
                       >
-                        <div className="flex items-center justify-center bg-white rounded-full w-4 h-4">
-                          <img src={getTeamLogoUrl(p.team)} alt={p.team} className="w-3 h-3 object-contain"
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                        </div>
+                        <TeamLogo abbr={p.team} size={14} />
                         {p.name.split(' ').pop()}
                         <span className={clsx('font-bold', GRADE_COLORS[p.salci.grade])}>{p.salci.grade}</span>
                       </button>
@@ -685,10 +666,7 @@ export default function AnalyticsPage() {
                           }}
                           className="w-4 h-4 accent-emerald-500"
                         />
-                        <div className="flex items-center justify-center bg-white rounded-full w-8 h-8 shrink-0">
-                          <img src={getTeamLogoUrl(p.team)} alt={p.team} className="w-6 h-6 object-contain"
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                        </div>
+                        <TeamLogo abbr={p.team} size={28} className="shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="font-semibold text-sm text-zinc-100 truncate">{p.name}</p>

@@ -6,7 +6,7 @@ import { clsx } from 'clsx';
 import SalciGauge from './SalciGauge';
 import KLineChart from './KLineChart';
 import Badge from '@/components/ui/Badge';
-import { getTeamLogoUrl } from '@/lib/mlb-api/logos';
+import TeamLogo from '@/components/ui/TeamLogo';
 import { GRADE_COLORS } from '@/lib/salci/grades';
 import type { Pitcher } from '@/types/pitcher';
 
@@ -51,14 +51,7 @@ const PitcherCard = ({ pitcher, bookLine = 5.5 }: PitcherCardProps) => {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center bg-white rounded-full w-9 h-9 shadow-sm shrink-0">
-            <img
-              src={getTeamLogoUrl(pitcher.team)}
-              alt={pitcher.team}
-              className="w-7 h-7 object-contain"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-          </div>
+          <TeamLogo abbr={pitcher.team} size={32} />
           <div>
             <p className="font-semibold text-zinc-100 leading-tight">{pitcher.name}</p>
             <p className="text-xs text-zinc-500">

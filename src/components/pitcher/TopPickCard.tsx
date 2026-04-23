@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { clsx } from 'clsx';
-import { getTeamLogoUrl } from '@/lib/mlb-api/logos';
+import TeamLogo from '@/components/ui/TeamLogo';
 import { GRADE_COLORS, GRADE_BG_COLORS } from '@/lib/salci/grades';
 import type { SalciScore } from '@/types/salci';
 
@@ -35,14 +35,7 @@ const TopPickCard = ({ pick }: TopPickCardProps) => {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center bg-white rounded-full w-8 h-8 shadow-sm shrink-0">
-            <img
-              src={getTeamLogoUrl(team)}
-              alt={team}
-              className="w-6 h-6 object-contain"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-          </div>
+          <TeamLogo abbr={team} size={28} />
           <div>
             <p className="text-sm font-semibold text-zinc-100 leading-tight">{name}</p>
             <p className="text-xs text-zinc-500">

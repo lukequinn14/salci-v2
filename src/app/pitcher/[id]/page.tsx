@@ -78,6 +78,8 @@ export default async function PitcherDetailPage({ params }: PageProps) {
     .eq('game_date', gameDate)
     .single() as { data: CachedScoreRow | null };
 
+  console.log('[Detail] pitcherId:', pitcherId, 'cached:', !!cached);
+
   if (cached) {
     const p = cached.pitchers;
     const bookLine = cached.book_line ?? 5.5;
