@@ -112,3 +112,161 @@ export const getLineup = async (gamePk: number): Promise<Array<{ id: number; bat
 
   return lineups;
 };
+
+interface BoxScorePitchingStats {
+  strikeOuts?: number;
+  inningsPitched?: string;
+}
+
+interface BoxScorePlayer {
+  person: { id: number };
+  stats?: { pitching?: BoxScorePitchingStats };
+  gameStatus?: { isCurrentPitcher?: boolean };
+}
+
+interface BoxScoreTeam {
+  pitchers: number[];
+  players: Record<string, BoxScorePlayer>;
+}
+
+export interface StarterKs {
+  pitcherId: number;
+  strikeOuts: number | null;
+  inningsPitched: string | null;
+}
+
+export const getStarterKsForGame = async (
+  gamePk: number
+): Promise<{ away: StarterKs | null; home: StarterKs | null }> => {
+  const url = `${BASE}/game/${gamePk}/boxscore`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) return { away: null, home: null };
+
+  const data = (await res.json()) as { teams: { away: BoxScoreTeam; home: BoxScoreTeam } };
+
+  const extractStarter = (team: BoxScoreTeam): StarterKs | null => {
+    const starterId = team.pitchers?.[0];
+    if (!starterId) return null;
+    const player = team.players[`ID${starterId}`];
+    return {
+      pitcherId: starterId,
+      strikeOuts: player?.stats?.pitching?.strikeOuts ?? null,
+      inningsPitched: player?.stats?.pitching?.inningsPitched ?? null,
+    };
+  };
+
+  return {
+    away: extractStarter(data.teams.away),
+    home: extractStarter(data.teams.home),
+  };
+};
+
+interface MlbStatSplit {
+  stat: {
+    era?: string;
+    strikeOuts?: number;
+    baseOnBalls?: number;
+    homeRuns?: number;
+    inningsPitched?: string;
+    whip?: string;
+    battersFaced?: number;
+    hits?: number;
+    earnedRuns?: number;
+    gamesPlayed?: number;
+    gamesStarted?: number;
+    wins?: number;
+    losses?: number;
+  };
+  team?: { id: number; name: string; abbreviation: string };
+  player?: { id: number; fullName: string };
+}
+
+export interface RawTeamStats {
+  teamId: number;
+  teamName: string;
+  abbr: string;
+  era: number;
+  strikeOuts: number;
+  baseOnBalls: number;
+  homeRuns: number;
+  inningsPitched: number;
+  whip: number;
+  battersFaced: number;
+  hits: number;
+  earnedRuns: number;
+  gamesPlayed: number;
+}
+
+const parseIP = (ip: string | undefined): number => {
+  if (!ip) return 0;
+  const [whole, thirds] = ip.split('.').map(Number);
+  return (whole ?? 0) + ((thirds ?? 0) / 3);
+};
+
+export const getAllTeamPitchingStats = async (
+  range: 'season' | '30d' | '14d' | '7d'
+): Promise<RawTeamStats[]> => {
+  const today = new Date().toISOString().slice(0, 10);
+  let url: string;
+
+  if (range === 'season') {
+    url = `${BASE}/stats?stats=season&group=pitching&sportId=1&gameType=R&season=2026&playerPool=All&limit=500`;
+  } else {
+    const days = { '30d': 30, '14d': 14, '7d': 7 }[range];
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    const startDate = start.toISOString().slice(0, 10);
+    url = `${BASE}/stats?stats=byDateRange&group=pitching&sportId=1&gameType=R&startDate=${startDate}&endDate=${today}&playerPool=All&limit=500`;
+  }
+
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as { stats: Array<{ splits: MlbStatSplit[] }> };
+  const splits: MlbStatSplit[] = data.stats?.[0]?.splits ?? [];
+
+  // Aggregate player-level stats by team
+  const teamMap = new Map<number, RawTeamStats>();
+
+  for (const split of splits) {
+    if (!split.team) continue;
+    const { id, name, abbreviation } = split.team;
+    const s = split.stat;
+    const ip = parseIP(s.inningsPitched);
+    if (ip === 0) continue;
+
+    const existing = teamMap.get(id) ?? {
+      teamId: id,
+      teamName: name,
+      abbr: abbreviation,
+      era: 0,
+      strikeOuts: 0,
+      baseOnBalls: 0,
+      homeRuns: 0,
+      inningsPitched: 0,
+      whip: 0,
+      battersFaced: 0,
+      hits: 0,
+      earnedRuns: 0,
+      gamesPlayed: 0,
+    };
+
+    existing.strikeOuts += s.strikeOuts ?? 0;
+    existing.baseOnBalls += s.baseOnBalls ?? 0;
+    existing.homeRuns += s.homeRuns ?? 0;
+    existing.inningsPitched += ip;
+    existing.battersFaced += s.battersFaced ?? 0;
+    existing.hits += s.hits ?? 0;
+    existing.earnedRuns += s.earnedRuns ?? 0;
+    existing.gamesPlayed = Math.max(existing.gamesPlayed, s.gamesPlayed ?? 0);
+
+    teamMap.set(id, existing);
+  }
+
+  // Compute derived stats
+  return Array.from(teamMap.values()).map((t) => ({
+    ...t,
+    era: t.inningsPitched > 0 ? (t.earnedRuns * 9) / t.inningsPitched : 0,
+    whip: t.inningsPitched > 0 ? (t.baseOnBalls + t.hits) / t.inningsPitched : 0,
+  }));
+};
