@@ -7,11 +7,22 @@ const ESPN_SLUG: Record<string, string> = {
   STL: 'stl', TB: 'tb',   TEX: 'tex', TOR: 'tor', WSH: 'wsh',
 };
 
-// Teams whose logos need the dark-bg variant on dark chart backgrounds
 const DARK_BG_TEAMS = new Set(['COL', 'SD', 'NYY', 'MIN', 'KC', 'PIT', 'MIL', 'CWS', 'SF']);
 
+// Explicit URL overrides for teams where the standard scoreboard path is unreliable
+const URL_OVERRIDES: Record<string, { standard: string; dark: string }> = {
+  ARI: {
+    standard: 'https://a.espncdn.com/i/teamlogos/mlb/500/scoreboard/ari.png',
+    dark: 'https://a.espncdn.com/i/teamlogos/mlb/500-dark/ari.png',
+  },
+};
+
 export const getTeamLogoUrl = (abbr: string, darkBg = false): string => {
-  const slug = ESPN_SLUG[abbr.toUpperCase()] ?? abbr.toLowerCase();
-  const variant = darkBg && DARK_BG_TEAMS.has(abbr.toUpperCase()) ? '500-dark' : '500/scoreboard';
+  const upper = abbr.toUpperCase();
+  const override = URL_OVERRIDES[upper];
+  if (override) return darkBg ? override.dark : override.standard;
+
+  const slug = ESPN_SLUG[upper] ?? abbr.toLowerCase();
+  const variant = darkBg && DARK_BG_TEAMS.has(upper) ? '500-dark' : '500/scoreboard';
   return `https://a.espncdn.com/i/teamlogos/mlb/${variant}/${slug}.png`;
 };
