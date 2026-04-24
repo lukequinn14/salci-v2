@@ -1,115 +1,110 @@
-import type { SalciInputs, SalciScore } from '@/types/salci';
+import type { SalciInputs, SalciScore, WorkloadInputs, MatchupInputs } from '@/types/salci';
 import { computeGrade } from './grades';
 
-const sigmoid = (z: number, sharpness: number): number =>
-  1 / (1 + Math.exp(-sharpness * z));
+// ─── core math ───────────────────────────────────────────────────────────────
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.max(min, Math.min(max, value));
+const clamp = (v: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, v));
+
+const sigmoid = (z: number, sharpness = 1.4): number =>
+  1 / (1 + Math.exp(-sharpness * z));
 
 const zToScore = (
   z: number,
-  center: number,
-  scale: number,
-  min: number,
-  max: number,
-  sharpness = 1.8
+  center = 50,
+  scale = 20,
+  hardMin = 10,
+  hardMax = 95,
+  sharpness = 1.6
 ): number => {
   const stretched = (sigmoid(z, sharpness) - 0.5) * 2;
   const score = center + stretched * scale;
-  return clamp(score, min, max);
+  return Math.max(hardMin, Math.min(hardMax, score));
 };
 
-export const computeStuffScore = (stuffPlus: number): number => {
+// ─── sub-scores ───────────────────────────────────────────────────────────────
+
+export const normalizeStuff = (stuffPlus: number): number => {
   const stuffZ = (stuffPlus - 100) / 8.0;
   return zToScore(stuffZ, 50, 36, 6, 97, 1.8);
 };
 
-export const computeLocationScore = (locationPlus: number): number => {
+export const normalizeLocation = (locationPlus: number): number => {
   const locationZ = (locationPlus - 100) / 10.0;
-  // Cap upside of great command — extreme precision hurts K prediction
-  const locationZAdj = Math.min(locationZ, 0.5);
+  const locationZAdj = Math.min(locationZ, 0.5); // cap upside — high command = pitching to contact
   return zToScore(locationZAdj, 50, 10, 35, 65);
 };
 
-export const computeMatchupScore = (
-  oppKPct: number,
-  oppZoneContact: number,
-  sameSidePct: number
-): number => {
-  const kZ = (oppKPct - 0.22) / 0.025;
-  const contactZ = -(oppZoneContact - 0.82) / 0.035;
-  const platoonZ = (sameSidePct - 0.5) / 0.15;
-  const rawMatchup = kZ * 0.7 + contactZ * 0.3 + platoonZ * 0.08;
+export const calculateMatchupScore = (inputs: MatchupInputs): number => {
+  const kZ = clamp((inputs.oppKPct - 0.22) / 0.025, -3, 3);
+  const contactZ = clamp(-(inputs.oppZoneContact - 0.82) / 0.035, -3, 3);
+  const platoonZ = clamp((inputs.sameSidePct - 0.50) / 0.15, -1.5, 1.5);
+  const rawMatchup = kZ * 0.70 + contactZ * 0.30 + platoonZ * 0.08;
   return zToScore(rawMatchup, 50, 22, 15, 90);
 };
 
-export const computeWorkloadScore = (
-  pPerIP: number,
-  projectedBF: number,
-  managerLeash: number,
-  tttKDrop: number
-): number => {
-  const efficiencyScore = clamp((20 - pPerIP) * 10 + 50, 0, 100);
-  const bfScore = clamp(((projectedBF - 15) / 12) * 100, 0, 100);
-  const leashScore = clamp(managerLeash, 0, 100);
-  const tttPenalty = clamp(100 - tttKDrop * 15, 0, 100);
-
-  const raw =
-    efficiencyScore * 0.25 +
-    bfScore * 0.3 +
-    leashScore * 0.25 +
-    tttPenalty * 0.2;
-
-  return clamp(raw, 20, 85);
+export const calculateWorkloadScore = (inputs: WorkloadInputs): number => {
+  const pIPZ = clamp(-(inputs.pPerIP - 15.5) / 2.0, -2.5, 2.5);
+  const bpi = 3 + (inputs.pPerIP / 15);
+  const projectedBF = inputs.avgIP * bpi;
+  const bfZ = clamp((projectedBF - 24) / 4, -2.5, 2.5);
+  const leashZ = clamp((inputs.avgPitchCount - 88) / 10, -2.5, 2.5);
+  const tttZ = -1.0; // league average TTT penalty
+  const rawWorkload = pIPZ * 0.25 + bfZ * 0.30 + leashZ * 0.25 + tttZ * 0.20;
+  return zToScore(rawWorkload, 50, 22, 20, 85);
 };
 
-export const computeVolatilityBuffer = (stuffPlus: number, locationPlus: number): number => {
+// ─── volatility & K projection ───────────────────────────────────────────────
+
+export const calculateVolatilityBuffer = (stuffPlus: number, locationPlus: number): number => {
   const gap = stuffPlus - locationPlus;
   if (gap > 22) return 2.1;
   if (gap > 15) return 1.75;
-  if (gap > 8) return 1.4;
-  if (gap < -15) return 0.8;
-  if (gap < -8) return 0.95;
+  if (gap > 8)  return 1.40;
+  if (gap < -15) return 0.80;
+  if (gap < -8)  return 0.95;
   return 1.15;
 };
 
+export const calculateExpectedKs = (salciTotal: number, projectedIP = 5.5): number => {
+  const kPerIP = clamp((salciTotal / 47.0) * 1.0, 0.40, 2.40);
+  return kPerIP * projectedIP;
+};
+
+export const calculateFloor = (expectedKs: number, volatilityBuffer: number): number =>
+  Math.max(0, Math.round(expectedKs - volatilityBuffer * Math.sqrt(expectedKs)));
+
+export const calculateCeiling = (expectedKs: number, volatilityBuffer: number): number =>
+  Math.round(expectedKs + volatilityBuffer * Math.sqrt(expectedKs) * 1.2);
+
+// ─── main entry point ─────────────────────────────────────────────────────────
+
 export const computeSalci = (inputs: SalciInputs): SalciScore => {
-  const stuffNorm = computeStuffScore(inputs.stuffPlus);
-  const locationNorm = computeLocationScore(inputs.locationPlus);
-  const matchupScore = computeMatchupScore(
-    inputs.oppKPct,
-    inputs.oppZoneContact,
-    inputs.sameSidePct
-  );
-  const workloadScore = computeWorkloadScore(
-    inputs.pPerIP,
-    inputs.projectedBF,
-    inputs.managerLeash,
-    inputs.tttKDrop
-  );
+  const stuffNorm = normalizeStuff(inputs.stuffPlus);
+  const locationNorm = normalizeLocation(inputs.locationPlus);
+  const matchupClamped = clamp(inputs.matchupScore, 15, 92);
+  const workloadClamped = clamp(inputs.workloadScore, 20, 85);
 
   const total = clamp(
     stuffNorm * 0.52 +
-      locationNorm * 0.08 +
-      clamp(matchupScore, 15, 92) * 0.3 +
-      clamp(workloadScore, 20, 85) * 0.1,
+    locationNorm * 0.08 +
+    matchupClamped * 0.30 +
+    workloadClamped * 0.10,
     10,
     95
   );
 
-  const buffer = computeVolatilityBuffer(inputs.stuffPlus, inputs.locationPlus);
-  const expectedKs = 1.5 + (total / 95) * 9.5;
-  const stdDev = Math.sqrt(expectedKs);
-  const floor = Math.max(0, Math.round(expectedKs - buffer * stdDev));
-  const ceiling = Math.round(expectedKs + buffer * stdDev);
+  const buffer = calculateVolatilityBuffer(inputs.stuffPlus, inputs.locationPlus);
+  const expectedKs = calculateExpectedKs(total, inputs.projectedIP);
+  const floor = calculateFloor(expectedKs, buffer);
+  const ceiling = calculateCeiling(expectedKs, buffer);
   const recommendOver = floor >= inputs.bookLine + 2;
 
   return {
     stuff: stuffNorm,
     location: locationNorm,
-    matchup: matchupScore,
-    workload: workloadScore,
+    matchup: inputs.matchupScore,
+    workload: inputs.workloadScore,
     total,
     grade: computeGrade(total),
     floor,

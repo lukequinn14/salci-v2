@@ -388,3 +388,105 @@ export const getPitcherLastNGames = async (
     gamesBack: validGames,
   };
 };
+
+export interface HitterSeasonStats {
+  playerId: number;
+  fullName: string;
+  avg: number;
+  ops: number;
+  kPct: number;
+  obp: number;
+  slg: number;
+  atBats: number;
+  plateAppearances: number;
+}
+
+export const getHitterSeasonStats = async (
+  playerId: number,
+  fullName: string
+): Promise<HitterSeasonStats | null> => {
+  const url = `${BASE}/people/${playerId}/stats?stats=season&group=hitting&season=2026`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as {
+    stats: Array<{
+      splits: Array<{
+        stat: {
+          avg?: string;
+          ops?: string;
+          obp?: string;
+          slg?: string;
+          strikeOuts?: number;
+          atBats?: number;
+          plateAppearances?: number;
+        };
+      }>;
+    }>;
+  };
+
+  const split = data.stats?.[0]?.splits?.[0]?.stat;
+  if (!split) return null;
+
+  const pa = split.plateAppearances ?? split.atBats ?? 1;
+  const kPct = pa > 0 ? (split.strikeOuts ?? 0) / pa : 0.22;
+
+  return {
+    playerId,
+    fullName,
+    avg: parseFloat(split.avg ?? '0') || 0,
+    ops: parseFloat(split.ops ?? '0') || 0,
+    obp: parseFloat(split.obp ?? '0') || 0,
+    slg: parseFloat(split.slg ?? '0') || 0,
+    kPct,
+    atBats: split.atBats ?? 0,
+    plateAppearances: pa,
+  };
+};
+
+export const getTodayLineups = async (
+  gameDate: string
+): Promise<Array<{
+  gamePk: number;
+  homeTeamAbbr: string;
+  awayTeamAbbr: string;
+  homePitcherId: number | null;
+  awayPitcherId: number | null;
+  hitters: Array<{ id: number; fullName: string; battingOrder: number; hand: string; teamAbbr: string }>;
+}>> => {
+  const starters = await getTodayStarters(gameDate);
+  const games: ReturnType<typeof getTodayLineups> extends Promise<infer T> ? T : never = [];
+
+  for (const start of starters) {
+    const existing = games.find((g) => g.gamePk === start.gamePk);
+    if (existing) {
+      if (start.isHome) existing.homePitcherId = start.pitcher.id;
+      else existing.awayPitcherId = start.pitcher.id;
+      continue;
+    }
+    games.push({
+      gamePk: start.gamePk,
+      homeTeamAbbr: start.isHome ? start.teamAbbr : start.opponentAbbr,
+      awayTeamAbbr: start.isHome ? start.opponentAbbr : start.teamAbbr,
+      homePitcherId: start.isHome ? start.pitcher.id : null,
+      awayPitcherId: start.isHome ? null : start.pitcher.id,
+      hitters: [],
+    });
+  }
+
+  // Fetch lineups in parallel for all games
+  await Promise.allSettled(
+    games.map(async (game) => {
+      const lineup = await getLineup(game.gamePk);
+      game.hitters = lineup.map((h) => ({
+        id: h.id,
+        fullName: '',
+        battingOrder: h.battingOrder,
+        hand: h.handedness,
+        teamAbbr: '',
+      }));
+    })
+  );
+
+  return games;
+};

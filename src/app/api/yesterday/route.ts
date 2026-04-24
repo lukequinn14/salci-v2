@@ -85,14 +85,9 @@ export const GET = async (): Promise<NextResponse> => {
       const salci = computeSalci({
         stuffPlus,
         locationPlus,
-        cswPct,
-        oppKPct: 0.22,
-        oppZoneContact: 0.82,
-        sameSidePct: 0.5,
-        pPerIP: 16,
-        projectedBF: 21,
-        managerLeash: 70,
-        tttKDrop: 1,
+        matchupScore: 50,
+        workloadScore: 50,
+        projectedIP: 5.5,
         bookLine,
       });
 

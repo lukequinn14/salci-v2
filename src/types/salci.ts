@@ -15,13 +15,20 @@ export interface SalciScore {
 export interface SalciInputs {
   stuffPlus: number;
   locationPlus: number;
-  cswPct: number;
+  matchupScore: number;   // pre-computed by calculateMatchupScore()
+  workloadScore: number;  // pre-computed by calculateWorkloadScore()
+  projectedIP: number;
+  bookLine: number;
+}
+
+export interface WorkloadInputs {
+  pPerIP: number;
+  avgIP: number;
+  avgPitchCount: number;
+}
+
+export interface MatchupInputs {
   oppKPct: number;
   oppZoneContact: number;
   sameSidePct: number;
-  pPerIP: number;
-  projectedBF: number;
-  managerLeash: number;
-  tttKDrop: number;
-  bookLine: number;
 }

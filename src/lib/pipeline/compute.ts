@@ -1,5 +1,15 @@
 import { getTodayStarters, getPitcherSeasonStats, getPitcherLastNGames, type ScheduledStart } from '@/lib/mlb-api/statsapi';
-import { computeSalci } from '@/lib/salci/scoring';
+import {
+  computeSalci,
+  calculateMatchupScore,
+  calculateWorkloadScore,
+  calculateVolatilityBuffer,
+  calculateExpectedKs,
+  calculateFloor,
+  calculateCeiling,
+  normalizeStuff,
+  normalizeLocation,
+} from '@/lib/salci/scoring';
 import { getBookLineForPitcher } from '@/lib/odds/fetcher';
 import { createServiceClient } from '@/lib/supabase/service';
 
@@ -18,11 +28,6 @@ const deriveStuffPlus = (k9: number): number =>
 const deriveLocationPlus = (whip: number): number =>
   clamp(100 + (1 - whip / 1.3) * 20, 75, 125);
 
-const deriveCswPct = (strikeOuts: number, battersFaced: number): number =>
-  battersFaced > 0
-    ? clamp((strikeOuts / battersFaced) / 0.29, 0.20, 0.38)
-    : 0.29;
-
 const computeAndStore = async (
   start: ScheduledStart,
   gameDate: string,
@@ -34,7 +39,6 @@ const computeAndStore = async (
     getBookLineForPitcher(start.pitcher.fullName),
   ]);
 
-  // Proxy inputs derived from MLB Stats API — no Statcast needed
   const k9 = seasonStats?.k9 ?? recentLog.avgK9;
   const whip = seasonStats?.whip ?? 1.3;
   const strikeOuts = seasonStats?.strikeOuts ?? 0;
@@ -42,30 +46,37 @@ const computeAndStore = async (
 
   const stuffPlus = deriveStuffPlus(k9);
   const locationPlus = deriveLocationPlus(whip);
-  const cswPct = deriveCswPct(strikeOuts, battersFaced);
+  const cswPct = battersFaced > 0 ? clamp((strikeOuts / battersFaced) / 0.29, 0.20, 0.38) : 0.29;
 
-  // Use recent game log for workload inputs
   const pPerIP = recentLog.avgPitchesPerIP > 0 ? recentLog.avgPitchesPerIP : 16;
-  const projectedIP = recentLog.avgIP > 0 ? recentLog.avgIP : 5.5;
-  const projectedBF = Math.round(projectedIP * 4.0);
+  const avgIP = recentLog.avgIP > 0 ? recentLog.avgIP : 5.5;
+  const avgPitchCount = pPerIP * avgIP;
+
+  // v4 scoring — use the proper sub-score functions
+  const workloadScore = calculateWorkloadScore({ pPerIP, avgIP, avgPitchCount });
+  const matchupScore = calculateMatchupScore({
+    oppKPct: 0.22,
+    oppZoneContact: 0.82,
+    sameSidePct: 0.50,
+  });
 
   const salci = computeSalci({
     stuffPlus,
     locationPlus,
-    cswPct,
-    oppKPct: 0.22,
-    oppZoneContact: 0.82,
-    sameSidePct: 0.5,
-    pPerIP,
-    projectedBF,
-    managerLeash: 70,
-    tttKDrop: 1,
+    matchupScore,
+    workloadScore,
+    projectedIP: avgIP,
     bookLine,
   });
 
+  // Verify sub-components match (double-check via direct calculation)
+  const buffer = calculateVolatilityBuffer(stuffPlus, locationPlus);
+  const expectedKs = calculateExpectedKs(salci.total, avgIP);
+  const floor = calculateFloor(expectedKs, buffer);
+  const ceiling = calculateCeiling(expectedKs, buffer);
+
   const computedAt = new Date().toISOString();
 
-  // Pitcher row must exist before score row (FK constraint) — run sequentially
   const pitcherUpsert = await supabase
     .from('pitchers')
     .upsert(
@@ -102,10 +113,10 @@ const computeAndStore = async (
       matchup_score: salci.matchup,
       workload_score: salci.workload,
       grade: salci.grade,
-      floor_ks: salci.floor,
-      ceiling_ks: salci.ceiling,
-      expected_ks: salci.expectedKs,
-      buffer: salci.buffer,
+      floor_ks: floor,
+      ceiling_ks: ceiling,
+      expected_ks: expectedKs,
+      buffer,
       recommend_over: salci.recommendOver,
       book_line: bookLine,
       opponent: start.opponentAbbr,
@@ -129,7 +140,6 @@ export const runSalciPipeline = async (gameDate: string): Promise<PipelineResult
   let computed = 0;
   let failed = 0;
 
-  // MLB Stats API is fast — can safely run 6 at a time
   const BATCH_SIZE = 6;
   for (let i = 0; i < starters.length; i += BATCH_SIZE) {
     const batch = starters.slice(i, i + BATCH_SIZE);

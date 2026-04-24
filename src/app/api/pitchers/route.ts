@@ -144,9 +144,11 @@ const computeLivePitcher = async (
   }
 
   const salci = computeSalci({
-    stuffPlus, locationPlus, cswPct,
-    oppKPct: 0.22, oppZoneContact: 0.82, sameSidePct: 0.5,
-    pPerIP: 16, projectedBF: 21, managerLeash: 70, tttKDrop: 1,
+    stuffPlus,
+    locationPlus,
+    matchupScore: 50,   // league-average matchup when lineup unknown
+    workloadScore: 50,  // league-average workload for live fallback
+    projectedIP: 5.5,
     bookLine,
   });
 
