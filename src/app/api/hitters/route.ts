@@ -22,6 +22,7 @@ interface PitcherCache {
 
 interface HitterEntry {
   id: number;
+  fullName: string;
   battingOrder: number;
   handedness: string;
   lineupStatus: 'confirmed' | 'probable';
@@ -90,7 +91,7 @@ export const GET = async (): Promise<NextResponse> => {
     ): Promise<HitterEntry[]> => {
       const confirmed = lineupEntries.filter((h) => h.side === side);
       if (hasConfirmedLineup && confirmed.length > 0) {
-        return confirmed.map((h) => ({ ...h, lineupStatus: 'confirmed' as const }));
+        return confirmed.map((h) => ({ ...h, fullName: '', lineupStatus: 'confirmed' as const }));
       }
       if (!teamId) return [];
       const roster = await getTeamRoster(teamId);
@@ -98,6 +99,7 @@ export const GET = async (): Promise<NextResponse> => {
         .filter((p) => p.primaryPosition !== 'P')
         .map((p) => ({
           id: p.id,
+          fullName: p.fullName,
           battingOrder: 0,
           handedness: p.handedness,
           lineupStatus: 'probable' as const,
@@ -120,7 +122,7 @@ export const GET = async (): Promise<NextResponse> => {
 
       await Promise.allSettled(
         hitterEntries.map(async (hitterEntry) => {
-          const hitterStats = await getHitterSeasonStats(hitterEntry.id, `Player ${hitterEntry.id}`);
+          const hitterStats = await getHitterSeasonStats(hitterEntry.id, hitterEntry.fullName || `Player ${hitterEntry.id}`);
 
           const bavg = hitterStats?.avg ?? 0.248;
           const ops = hitterStats?.ops ?? 0.710;
@@ -145,7 +147,7 @@ export const GET = async (): Promise<NextResponse> => {
           matchups.push({
             hitter: {
               id: hitterEntry.id,
-              name: hitterStats?.fullName ?? `Player ${hitterEntry.id}`,
+              name: hitterStats?.fullName ?? (hitterEntry.fullName || `Player ${hitterEntry.id}`),
               team: hitterTeamAbbr,
               handedness: hitterEntry.handedness as 'L' | 'R' | 'S',
               battingOrder: hitterEntry.battingOrder,
