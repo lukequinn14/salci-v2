@@ -7,6 +7,7 @@ import SalciGauge from './SalciGauge';
 import KLineChart from './KLineChart';
 import Badge from '@/components/ui/Badge';
 import TeamLogo from '@/components/ui/TeamLogo';
+import WatchlistButton from './WatchlistButton';
 import { GRADE_COLORS } from '@/lib/salci/grades';
 import type { Pitcher } from '@/types/pitcher';
 
@@ -63,12 +64,15 @@ const PitcherCard = ({ pitcher, bookLine = 5.5 }: PitcherCardProps) => {
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          {overConfident && (
-            <Badge variant="emerald">
-              <TrendingUp size={10} className="mr-1" />
-              OVER
-            </Badge>
-          )}
+          <div className="flex items-center gap-1">
+            {overConfident && (
+              <Badge variant="emerald">
+                <TrendingUp size={10} className="mr-1" />
+                OVER
+              </Badge>
+            )}
+            <WatchlistButton pitcherId={pitcher.id} size="sm" />
+          </div>
           <span className={clsx('text-xs font-medium', GRADE_COLORS[salci.grade])}>
             {salci.grade}
           </span>

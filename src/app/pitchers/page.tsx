@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import { RefreshCw } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import PitcherCard from '@/components/pitcher/PitcherCard';
 import YesterdayResultCard from '@/components/pitcher/YesterdayResultCard';
 import Spinner from '@/components/ui/Spinner';
@@ -155,81 +156,106 @@ export default function PitchersPage() {
         </button>
       </div>
 
-      {/* Today tab */}
-      {tab === 'today' && (
-        <>
-          {todayLoading && (
-            <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
-          )}
-          {todayError && (
-            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
-              {todayError}
-            </div>
-          )}
-          {!todayLoading && todayData?.pitchers.length === 0 && (
-            <EmptyState
-              message="No starters scheduled today"
-              sub="Check back when games are on the board"
-            />
-          )}
-          {todayData && todayData.pitchers.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {todayData.pitchers.map((pitcher) => (
-                <PitcherCard key={pitcher.id} pitcher={pitcher} bookLine={5.5} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Yesterday tab */}
-      {tab === 'yesterday' && (
-        <>
-          {yesterdayLoading && (
-            <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
-          )}
-          {yesterdayError && (
-            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
-              {yesterdayError}
-            </div>
-          )}
-          {!yesterdayLoading && yesterdayData?.results.length === 0 && (
-            <EmptyState
-              message="No results from yesterday"
-              sub="No games were scheduled or data isn't available yet"
-            />
-          )}
-          {yesterdayData && yesterdayData.results.length > 0 && (
+      {/* Tab content — fade on switch */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          {/* Today tab */}
+          {tab === 'today' && (
             <>
-              {betsToday > 0 && (
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
-                    <p className="text-2xl font-bold text-emerald-400">{winsToday}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">Over hits</p>
-                  </div>
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
-                    <p className="text-2xl font-bold text-red-400">
-                      {yesterdayData.results.filter((r) => r.result === 'loss').length}
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-0.5">Misses</p>
-                  </div>
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
-                    <p className="text-2xl font-bold text-zinc-300">
-                      {betsToday > 0 ? `${Math.round((winsToday / betsToday) * 100)}%` : '—'}
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-0.5">Hit rate</p>
-                  </div>
+              {todayLoading && (
+                <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
+              )}
+              {todayError && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+                  {todayError}
                 </div>
               )}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {yesterdayData.results.map((result) => (
-                  <YesterdayResultCard key={result.pitcherId} result={result} />
-                ))}
-              </div>
+              {!todayLoading && todayData?.pitchers.length === 0 && (
+                <EmptyState
+                  message="No starters scheduled today"
+                  sub="Check back when games are on the board"
+                />
+              )}
+              {todayData && todayData.pitchers.length > 0 && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {todayData.pitchers.map((pitcher, i) => (
+                    <motion.div
+                      key={pitcher.id}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05, duration: 0.3 }}
+                    >
+                      <PitcherCard pitcher={pitcher} bookLine={5.5} />
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </>
           )}
-        </>
-      )}
+
+          {/* Yesterday tab */}
+          {tab === 'yesterday' && (
+            <>
+              {yesterdayLoading && (
+                <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
+              )}
+              {yesterdayError && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+                  {yesterdayError}
+                </div>
+              )}
+              {!yesterdayLoading && yesterdayData?.results.length === 0 && (
+                <EmptyState
+                  message="No results from yesterday"
+                  sub="No games were scheduled or data isn't available yet"
+                />
+              )}
+              {yesterdayData && yesterdayData.results.length > 0 && (
+                <>
+                  {betsToday > 0 && (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
+                        <p className="text-2xl font-bold text-emerald-400">{winsToday}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">Over hits</p>
+                      </div>
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
+                        <p className="text-2xl font-bold text-red-400">
+                          {yesterdayData.results.filter((r) => r.result === 'loss').length}
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-0.5">Misses</p>
+                      </div>
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
+                        <p className="text-2xl font-bold text-zinc-300">
+                          {betsToday > 0 ? `${Math.round((winsToday / betsToday) * 100)}%` : '—'}
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-0.5">Hit rate</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {yesterdayData.results.map((result, i) => (
+                      <motion.div
+                        key={result.pitcherId}
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05, duration: 0.3 }}
+                      >
+                        <YesterdayResultCard result={result} />
+                      </motion.div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

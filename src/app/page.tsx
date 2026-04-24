@@ -56,6 +56,8 @@ export default async function HomePage() {
   const supabase = await createClient();
   const todayDate = new Date().toISOString().slice(0, 10);
 
+  const { data: { user } } = await supabase.auth.getUser();
+
   const [{ data: run }, { data: topPicksRaw }] = await Promise.all([
     supabase
       .from('pipeline_runs')
@@ -72,6 +74,24 @@ export default async function HomePage() {
   ]);
 
   const topPicks = (topPicksRaw ?? []) as unknown as TopPick[];
+
+  // Watchlist for signed-in users
+  let watchlistPicks: TopPick[] = [];
+  if (user) {
+    const { data: wl } = await supabase
+      .from('watchlists')
+      .select('pitcher_id')
+      .eq('user_id', user.id);
+    if (wl && wl.length > 0) {
+      const ids = wl.map((w: { pitcher_id: number }) => w.pitcher_id);
+      const { data: wlScores } = await supabase
+        .from('daily_salci_scores')
+        .select('pitcher_id, salci_total, grade, floor_ks, ceiling_ks, expected_ks, recommend_over, opponent, is_home, pitchers(name, team)')
+        .eq('game_date', todayDate)
+        .in('pitcher_id', ids);
+      watchlistPicks = (wlScores ?? []) as unknown as TopPick[];
+    }
+  }
 
   const currentDate = new Date().toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -96,6 +116,27 @@ export default async function HomePage() {
           above 80 signal high-confidence strikeout over plays.
         </p>
       </section>
+
+      {/* Watchlist section (logged-in only) */}
+      {user && watchlistPicks.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">
+              Your Watchlist
+            </h2>
+            <Link href="/pitchers" className="text-xs text-amber-500 hover:text-amber-400 transition-colors">
+              See all →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {watchlistPicks.map((pick) => (
+              <div key={pick.pitcher_id} className="ring-1 ring-amber-500/40 rounded-xl shadow-[0_0_16px_-4px_rgba(245,158,11,0.2)]">
+                <TopPickCard pick={pick} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Top 3 picks */}
       {topPicks.length > 0 && (

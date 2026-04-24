@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { animate } from 'framer-motion';
 import { GRADE_COLORS, GRADE_LABEL } from '@/lib/salci/grades';
 import type { SalciScore } from '@/types/salci';
 
@@ -9,15 +11,25 @@ interface SalciGaugeProps {
 }
 
 const SalciGauge = ({ salci, size = 120 }: SalciGaugeProps) => {
+  const [displayTotal, setDisplayTotal] = useState(0);
+
+  useEffect(() => {
+    const controls = animate(0, salci.total, {
+      duration: 0.6,
+      ease: 'easeOut',
+      onUpdate: (v) => setDisplayTotal(v),
+    });
+    return controls.stop;
+  }, [salci.total]);
+
   const cx = size / 2;
   const cy = size / 2;
   const r = size * 0.38;
   const strokeWidth = size * 0.09;
 
-  // Arc spans 240 degrees (from 150° to 390°/30°)
   const arcSpan = 240;
   const startAngle = 150;
-  const fillAngle = (salci.total / 100) * arcSpan;
+  const fillAngle = (displayTotal / 100) * arcSpan;
 
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const arcPath = (startDeg: number, endDeg: number) => {
@@ -53,7 +65,7 @@ const SalciGauge = ({ salci, size = 120 }: SalciGaugeProps) => {
           strokeLinecap="round"
         />
         {/* Fill */}
-        {salci.total > 0 && (
+        {displayTotal > 0 && (
           <path
             d={arcPath(startAngle, startAngle + fillAngle)}
             fill="none"
@@ -74,7 +86,7 @@ const SalciGauge = ({ salci, size = 120 }: SalciGaugeProps) => {
           fill={gradeColor}
           fontFamily="var(--font-geist-sans)"
         >
-          {Math.round(salci.total)}
+          {Math.round(displayTotal)}
         </text>
         {/* Grade */}
         <text
