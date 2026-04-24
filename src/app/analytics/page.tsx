@@ -48,17 +48,49 @@ interface ScatterPoint { x: number; y: number; z: number; abbr: string }
 
 const TeamLogoDot = (props: unknown) => {
   const { cx, cy, payload } = props as { cx: number; cy: number; payload: ScatterPoint };
-  const size = 22;
+  const size = 28;
   return (
     <g style={{ cursor: 'pointer' }}>
-      <circle cx={cx} cy={cy} r={size / 2 + 3} fill="white" stroke="#27272a" strokeWidth={1} />
-      <image
-        href={getTeamLogoUrl(payload.abbr, true)}
-        x={cx - size / 2}
-        y={cy - size / 2}
-        width={size}
-        height={size}
-      />
+      {/* foreignObject lets us use <img> (works with ESPN CDN) instead of SVG <image> (blocked) */}
+      <foreignObject x={cx - size / 2} y={cy - size / 2} width={size} height={size}>
+        <img
+          src={getTeamLogoUrl(payload.abbr, false)}
+          width={size}
+          height={size}
+          style={{ objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
+          onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }}
+        />
+      </foreignObject>
+      {/* Transparent overlay so Scatter onClick still fires */}
+      <rect x={cx - size / 2} y={cy - size / 2} width={size} height={size} fill="transparent" />
+    </g>
+  );
+};
+
+// ─── bar chart x-axis tick with team logo ─────────────────────────────────────
+
+const XAxisTickWithLogo = (props: Record<string, unknown>) => {
+  const x = props.x as number;
+  const y = props.y as number;
+  const payload = props.payload as { value: string };
+  const abbr = payload.value;
+  const [failed, setFailed] = useState(false);
+  const size = 14;
+  return (
+    <g>
+      {failed ? (
+        <text x={x} y={y + 10} textAnchor="middle" fontSize={9} fill="#71717a">{abbr}</text>
+      ) : (
+        <foreignObject x={x - size / 2} y={y + 2} width={size} height={size}>
+          <img
+            src={getTeamLogoUrl(abbr, false)}
+            width={size}
+            height={size}
+            style={{ objectFit: 'contain', display: 'block' }}
+            onError={() => setFailed(true)}
+          />
+        </foreignObject>
+      )}
     </g>
   );
 };
@@ -349,9 +381,9 @@ export default function AnalyticsPage() {
                 </div>
 
                 {chartType === 'bar' ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={chartTeams} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-                      <XAxis dataKey="abbr" tick={{ fontSize: 11, fill: '#71717a' }} axisLine={false} tickLine={false} />
+                  <ResponsiveContainer width="100%" height={296}>
+                    <BarChart data={chartTeams} margin={{ top: 8, right: 8, bottom: 16, left: -8 }}>
+                      <XAxis dataKey="abbr" tick={XAxisTickWithLogo} axisLine={false} tickLine={false} interval={0} />
                       <YAxis tick={{ fontSize: 10, fill: '#71717a' }} axisLine={false} tickLine={false}
                         tickFormatter={(v: number) => METRIC_FMT[metric](v)} />
                       <Tooltip content={<BarTooltip metric={metric} />} cursor={{ fill: '#ffffff06' }} />
