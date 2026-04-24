@@ -10,6 +10,7 @@ export interface HitLikelihoodInputs {
   pitcherKPct: number;
   pitcherERA: number;
   pitcherWHIP: number;
+  pitcherSalciTotal?: number; // 0–95; S-grade (80+) suppresses hit probability
   // Matchup context
   pitcherHand: 'L' | 'R';
   hitterHand: 'L' | 'R' | 'S';
@@ -73,7 +74,10 @@ export const calculateHitLikelihood = (inputs: HitLikelihoodInputs): HitLikeliho
     platoonEdge * 0.15 +
     contactProfile * 0.15;
 
-  const probability = clamp(0.15 + rawProb * 0.25, 0.15, 0.40);
+  const salci = inputs.pitcherSalciTotal ?? 0;
+  const salciFactor = salci >= 80 ? 0.88 : salci >= 70 ? 0.92 : salci >= 60 ? 0.96 : 1.0;
+
+  const probability = clamp((0.15 + rawProb * 0.25) * salciFactor, 0.15, 0.40);
 
   return {
     probability,

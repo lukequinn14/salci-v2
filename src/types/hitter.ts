@@ -3,7 +3,8 @@ export interface Hitter {
   name: string;
   team: string;
   handedness: 'L' | 'R' | 'S';
-  battingOrder: number;
+  battingOrder: number; // 0 when lineup not yet confirmed
+  lineupStatus: 'confirmed' | 'probable';
   bavg: number;
   ops: number;
   kPct: number;
@@ -18,6 +19,7 @@ export interface HitterMatchup {
   pitcherId: number;
   pitcherName: string;
   pitcherTeam: string;
+  pitcherSalciTotal: number;
   platoonAdvantage: boolean;
   kLikelihood: number;
 }

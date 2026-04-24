@@ -20,8 +20,10 @@ export interface ScheduledStart {
   pitcher: ProbablePitcher;
   team: string;
   teamAbbr: string;
+  teamId: number;
   opponent: string;
   opponentAbbr: string;
+  opponentId: number;
   isHome: boolean;
 }
 
@@ -43,15 +45,19 @@ export const getTodayStarters = async (date?: string): Promise<ScheduledStart[]>
     const awayPitcher = game.teams.away.probablePitcher;
     const homePitcher = game.teams.home.probablePitcher;
 
+    const awayAbbr = game.teams.away.team.abbreviation || game.teams.away.team.name.slice(0, 3).toUpperCase();
+    const homeAbbr = game.teams.home.team.abbreviation || game.teams.home.team.name.slice(0, 3).toUpperCase();
     if (awayPitcher) {
       starts.push({
         gamePk: game.gamePk,
         gameDate,
         pitcher: awayPitcher,
         team: game.teams.away.team.name,
-        teamAbbr: game.teams.away.team.abbreviation || game.teams.away.team.name.slice(0, 3).toUpperCase(),
+        teamAbbr: awayAbbr,
+        teamId: game.teams.away.team.id,
         opponent: game.teams.home.team.name,
-        opponentAbbr: game.teams.home.team.abbreviation || game.teams.home.team.name.slice(0, 3).toUpperCase(),
+        opponentAbbr: homeAbbr,
+        opponentId: game.teams.home.team.id,
         isHome: false,
       });
     }
@@ -61,9 +67,11 @@ export const getTodayStarters = async (date?: string): Promise<ScheduledStart[]>
         gameDate,
         pitcher: homePitcher,
         team: game.teams.home.team.name,
-        teamAbbr: game.teams.home.team.abbreviation || game.teams.home.team.name.slice(0, 3).toUpperCase(),
+        teamAbbr: homeAbbr,
+        teamId: game.teams.home.team.id,
         opponent: game.teams.away.team.name,
-        opponentAbbr: game.teams.away.team.abbreviation || game.teams.away.team.name.slice(0, 3).toUpperCase(),
+        opponentAbbr: awayAbbr,
+        opponentId: game.teams.away.team.id,
         isHome: true,
       });
     }
@@ -72,19 +80,25 @@ export const getTodayStarters = async (date?: string): Promise<ScheduledStart[]>
   return starts;
 };
 
-export const getTeamRoster = async (teamId: number): Promise<Array<{ id: number; fullName: string; primaryPosition: string }>> => {
-  const url = `${BASE}/teams/${teamId}/roster?rosterType=active`;
+export const getTeamRoster = async (teamId: number): Promise<Array<{ id: number; fullName: string; primaryPosition: string; handedness: string }>> => {
+  const url = `${BASE}/teams/${teamId}/roster?rosterType=active&hydrate=person`;
   const res = await fetch(url, { next: { revalidate: 3600 } });
   if (!res.ok) return [];
-  const data = await res.json() as { roster: Array<{ person: { id: number; fullName: string }; position: { abbreviation: string } }> };
+  const data = await res.json() as {
+    roster: Array<{
+      person: { id: number; fullName: string; batSide?: { code: string } };
+      position: { abbreviation: string };
+    }>;
+  };
   return data.roster.map((r) => ({
     id: r.person.id,
     fullName: r.person.fullName,
     primaryPosition: r.position.abbreviation,
+    handedness: r.person.batSide?.code ?? 'R',
   }));
 };
 
-export const getLineup = async (gamePk: number): Promise<Array<{ id: number; battingOrder: number; handedness: string }>> => {
+export const getLineup = async (gamePk: number): Promise<Array<{ id: number; battingOrder: number; handedness: string; side: 'away' | 'home' }>> => {
   const url = `${BASE}/game/${gamePk}/boxscore`;
   const res = await fetch(url, { next: { revalidate: 300 } });
   if (!res.ok) return [];
@@ -96,15 +110,16 @@ export const getLineup = async (gamePk: number): Promise<Array<{ id: number; bat
     };
   };
 
-  const lineups: Array<{ id: number; battingOrder: number; handedness: string }> = [];
+  const lineups: Array<{ id: number; battingOrder: number; handedness: string; side: 'away' | 'home' }> = [];
 
-  for (const side of [data.teams.away, data.teams.home] as const) {
+  for (const [teamSide, side] of [['away', data.teams.away], ['home', data.teams.home]] as const) {
     for (const [, player] of Object.entries(side.players)) {
       if (player.battingOrder) {
         lineups.push({
           id: player.person.id,
           battingOrder: Math.floor(Number(player.battingOrder) / 100),
           handedness: player.batSide?.code ?? 'R',
+          side: teamSide,
         });
       }
     }
@@ -483,7 +498,7 @@ export const getTodayLineups = async (
         fullName: '',
         battingOrder: h.battingOrder,
         hand: h.handedness,
-        teamAbbr: '',
+        teamAbbr: h.side === 'away' ? game.awayTeamAbbr : game.homeTeamAbbr,
       }));
     })
   );
