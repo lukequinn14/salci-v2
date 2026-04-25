@@ -51,7 +51,6 @@ const TeamLogoDot = (props: unknown) => {
   const size = 28;
   return (
     <g style={{ cursor: 'pointer' }}>
-      {/* foreignObject lets us use <img> (works with ESPN CDN) instead of SVG <image> (blocked) */}
       <foreignObject x={cx - size / 2} y={cy - size / 2} width={size} height={size}>
         <img
           src={getTeamLogoUrl(payload.abbr, false)}
@@ -61,7 +60,7 @@ const TeamLogoDot = (props: unknown) => {
           onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }}
         />
       </foreignObject>
-      {/* Transparent overlay so Scatter onClick still fires */}
+      {/* Transparent overlay preserves Scatter onClick */}
       <rect x={cx - size / 2} y={cy - size / 2} width={size} height={size} fill="transparent" />
     </g>
   );
@@ -75,11 +74,11 @@ const XAxisTickWithLogo = (props: Record<string, unknown>) => {
   const payload = props.payload as { value: string };
   const abbr = payload.value;
   const [failed, setFailed] = useState(false);
-  const size = 14;
+  const size = 16;
   return (
     <g>
       {failed ? (
-        <text x={x} y={y + 10} textAnchor="middle" fontSize={9} fill="#71717a">{abbr}</text>
+        <text x={x} y={y + 11} textAnchor="middle" fontSize={9} fill="#71717a">{abbr}</text>
       ) : (
         <foreignObject x={x - size / 2} y={y + 2} width={size} height={size}>
           <img
@@ -320,7 +319,7 @@ export default function AnalyticsPage() {
               tab === t ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
             )}
           >
-            {t === 'parlay' ? '⚡ Parlay' : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -425,12 +424,6 @@ export default function AnalyticsPage() {
 
               {/* Team chips with trend badges */}
               <div className="flex flex-col gap-2">
-                {/* Visible debug strip — remove once abbr mapping is confirmed */}
-                {allTeams.length > 0 && (
-                  <p className="text-[10px] text-zinc-700 font-mono">
-                    abbrs: {allTeams.slice(0, 8).map((t) => t.abbr).join(', ')}
-                  </p>
-                )}
                 <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
                   {chartType === 'bar' ? 'Click team to highlight' : 'Click team to drill down pitchers'}
                   {focusTeam && <span className="ml-2 text-emerald-400">Showing {focusTeam} pitchers ↓</span>}
