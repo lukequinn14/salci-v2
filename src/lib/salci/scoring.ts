@@ -71,11 +71,17 @@ export const calculateExpectedKs = (salciTotal: number, projectedIP = 5.5): numb
   return kPerIP * projectedIP;
 };
 
-export const calculateFloor = (expectedKs: number, volatilityBuffer: number): number =>
-  Math.max(0, Math.round(expectedKs - volatilityBuffer * Math.sqrt(expectedKs)));
+export const calculateFloor = (expectedKs: number, volatilityBuffer: number): number => {
+  const rawFloor = expectedKs - volatilityBuffer * Math.sqrt(expectedKs);
+  const minFloor = Math.max(0, expectedKs - 3);
+  return Math.round(Math.max(minFloor, rawFloor));
+};
 
-export const calculateCeiling = (expectedKs: number, volatilityBuffer: number): number =>
-  Math.round(expectedKs + volatilityBuffer * Math.sqrt(expectedKs) * 1.2);
+export const calculateCeiling = (expectedKs: number, volatilityBuffer: number): number => {
+  const rawCeiling = expectedKs + volatilityBuffer * Math.sqrt(expectedKs) * 1.2;
+  const maxCeiling = expectedKs + 4;
+  return Math.min(Math.round(maxCeiling), Math.round(rawCeiling));
+};
 
 // ─── main entry point ─────────────────────────────────────────────────────────
 

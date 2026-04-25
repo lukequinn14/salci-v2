@@ -9,8 +9,10 @@ interface KLineChartProps {
 }
 
 const KLineChart = ({ salci, bookLine }: KLineChartProps) => {
-  const max = Math.max(salci.ceiling + 2, bookLine + 2, 10);
-  const toP = (v: number) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`;
+  const chartMin = Math.max(0, salci.floor - 1);
+  const chartMax = salci.ceiling + 1;
+  const span = Math.max(1, chartMax - chartMin);
+  const toP = (v: number) => `${Math.max(0, Math.min(100, ((v - chartMin) / span) * 100))}%`;
 
   const expectedLabel = (Math.round(salci.expectedKs * 10) / 10).toFixed(1);
   const expectedAboveBook = salci.expectedKs > bookLine;

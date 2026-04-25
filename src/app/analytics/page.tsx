@@ -6,7 +6,7 @@ import {
   ResponsiveContainer, ScatterChart, Scatter, ZAxis,
 } from 'recharts';
 import { clsx } from 'clsx';
-import { TrendingUp, TrendingDown, Minus, ArrowUpRight, Star } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ArrowUpRight, Star, Search } from 'lucide-react';
 import Spinner from '@/components/ui/Spinner';
 import RadarCompare from '@/components/analytics/RadarCompare';
 import ParlayCardGenerator from '@/components/analytics/ParlayCardGenerator';
@@ -16,14 +16,14 @@ import { GRADE_COLORS, GRADE_BG_COLORS } from '@/lib/salci/grades';
 import type { TeamPitchingStats, PitchingMetric, DateRange } from '@/types/results';
 import type { Pitcher } from '@/types/pitcher';
 
-// ─── constants ───────────────────────────────────────────────────────────────
+// ── constants ──────────────────────────────────────────────────────────────────
 
 const METRICS: { key: PitchingMetric; label: string; desc: string; lowerIsBetter: boolean }[] = [
-  { key: 'era',   label: 'ERA',  desc: 'Earned Run Average',          lowerIsBetter: true },
+  { key: 'era',   label: 'ERA',  desc: 'Earned Run Average',            lowerIsBetter: true },
   { key: 'fip',   label: 'FIP',  desc: 'Fielding Independent Pitching', lowerIsBetter: true },
-  { key: 'kPct',  label: 'K%',   desc: 'Strikeout Rate',              lowerIsBetter: false },
-  { key: 'whip',  label: 'WHIP', desc: 'Walks + Hits per IP',         lowerIsBetter: true },
-  { key: 'bbPct', label: 'BB%',  desc: 'Walk Rate',                   lowerIsBetter: true },
+  { key: 'kPct',  label: 'K%',   desc: 'Strikeout Rate',                lowerIsBetter: false },
+  { key: 'whip',  label: 'WHIP', desc: 'Walks + Hits per IP',           lowerIsBetter: true },
+  { key: 'bbPct', label: 'BB%',  desc: 'Walk Rate',                     lowerIsBetter: true },
 ];
 
 const RANGES: { key: DateRange; label: string }[] = [
@@ -33,16 +33,15 @@ const RANGES: { key: DateRange; label: string }[] = [
   { key: '7d',     label: 'L7' },
 ];
 
-const CHART_COLORS = ['#34d399', '#38bdf8', '#a78bfa', '#fb923c', '#f472b6'];
-const PITCHER_COLORS = ['#34d399', '#38bdf8', '#a78bfa', '#fb923c'];
-
 const METRIC_FMT: Record<PitchingMetric, (v: number) => string> = {
   era: (v) => v.toFixed(2), fip: (v) => v.toFixed(2),
   kPct: (v) => `${v.toFixed(1)}%`, whip: (v) => v.toFixed(2),
   bbPct: (v) => `${v.toFixed(1)}%`,
 };
 
-// ─── scatter dot with team logo ───────────────────────────────────────────────
+const PITCHER_COLORS = ['#34d399', '#38bdf8', '#a78bfa', '#fb923c'];
+
+// ── chart helpers ──────────────────────────────────────────────────────────────
 
 interface ScatterPoint { x: number; y: number; z: number; abbr: string }
 
@@ -60,25 +59,22 @@ const TeamLogoDot = (props: unknown) => {
           onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }}
         />
       </foreignObject>
-      {/* Transparent overlay preserves Scatter onClick */}
       <rect x={cx - size / 2} y={cy - size / 2} width={size} height={size} fill="transparent" />
     </g>
   );
 };
 
-// ─── bar chart x-axis tick with team logo ─────────────────────────────────────
-
-const XAxisTickWithLogo = (props: Record<string, unknown>) => {
+// Logo tick for bar chart X-axis — foreignObject + img bypasses ESPN CDN SVG image blocking
+const XAxisLogoTick = (props: Record<string, unknown>) => {
   const x = props.x as number;
   const y = props.y as number;
-  const payload = props.payload as { value: string };
-  const abbr = payload.value;
+  const abbr = (props.payload as { value: string }).value;
   const [failed, setFailed] = useState(false);
   const size = 16;
   return (
     <g>
       {failed ? (
-        <text x={x} y={y + 11} textAnchor="middle" fontSize={9} fill="#71717a">{abbr}</text>
+        <text x={x} y={y + 11} textAnchor="middle" fontSize={8} fill="#52525b">{abbr}</text>
       ) : (
         <foreignObject x={x - size / 2} y={y + 2} width={size} height={size}>
           <img
@@ -94,68 +90,64 @@ const XAxisTickWithLogo = (props: Record<string, unknown>) => {
   );
 };
 
-// ─── custom tooltip ───────────────────────────────────────────────────────────
-
 const BarTooltip = ({ active, payload, label, metric }: {
   active?: boolean; payload?: Array<{ value: number }>; label?: string; metric: PitchingMetric;
 }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-xs shadow-xl">
-      <p className="mb-1 font-semibold text-zinc-300">{label}</p>
+      <div className="flex items-center gap-1.5 mb-1">
+        <TeamLogo abbr={label ?? ''} size={14} darkBg={false} />
+        <p className="font-semibold text-zinc-300">{label}</p>
+      </div>
       <p className="text-emerald-400 font-bold">{METRIC_FMT[metric](payload[0].value)}</p>
     </div>
   );
 };
 
-// ─── range bar for Compare tab ────────────────────────────────────────────────
+// ── compare range bar ──────────────────────────────────────────────────────────
 
 const RangeBar = ({ pitcher, bookLine, color }: { pitcher: Pitcher; bookLine: number; color: string }) => {
-  const max = Math.max(pitcher.salci.ceiling + 2, bookLine + 2, 10);
-  const toP = (v: number) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`;
+  const chartMin = Math.max(0, pitcher.salci.floor - 1);
+  const chartMax = pitcher.salci.ceiling + 1;
+  const span = Math.max(1, chartMax - chartMin);
+  const toP = (v: number) => `${Math.max(0, Math.min(100, ((v - chartMin) / span) * 100))}%`;
 
   return (
     <div className="flex items-center gap-3">
       <div className="w-32 shrink-0">
         <p className="text-xs font-semibold text-zinc-200 truncate">{pitcher.name}</p>
         <div className="flex items-center gap-1 mt-0.5">
-          <span
-            className={clsx('text-xs font-bold px-1.5 py-0.5 rounded ring-1', GRADE_BG_COLORS[pitcher.salci.grade], GRADE_COLORS[pitcher.salci.grade])}
-          >
+          <span className={clsx('text-xs font-bold px-1.5 py-0.5 rounded ring-1', GRADE_BG_COLORS[pitcher.salci.grade], GRADE_COLORS[pitcher.salci.grade])}>
             {pitcher.salci.grade}
           </span>
           <span className="text-xs text-zinc-600">{Math.round(pitcher.salci.total)}</span>
         </div>
       </div>
       <div className="flex-1 relative" style={{ height: 32 }}>
-        {/* Track */}
         <div className="absolute h-1.5 rounded-full bg-zinc-800" style={{ top: 10, left: 0, right: 0 }} />
-        {/* Range */}
         <div
           className="absolute h-1.5 rounded-full opacity-40"
           style={{ top: 10, backgroundColor: color, left: toP(pitcher.salci.floor), width: `calc(${toP(pitcher.salci.ceiling)} - ${toP(pitcher.salci.floor)})` }}
         />
-        {/* Book line */}
         <div className="absolute w-px bg-amber-400" style={{ top: 5, height: 21, left: toP(bookLine) }} />
-        {/* Dot at expected */}
         <div
           className="absolute w-3 h-3 rounded-full border-2 border-zinc-950 -translate-x-1/2"
           style={{ top: 9, left: toP(pitcher.salci.expectedKs), backgroundColor: color }}
         />
-        {/* Labels */}
         <span className="absolute text-[9px] text-zinc-600 -translate-x-1/2" style={{ top: 24, left: toP(pitcher.salci.floor) }}>{pitcher.salci.floor}</span>
         <span className="absolute text-[9px] text-zinc-600 -translate-x-1/2" style={{ top: 24, left: toP(pitcher.salci.ceiling) }}>{pitcher.salci.ceiling}</span>
         <span className="absolute text-[9px] text-amber-400 -translate-x-1/2 whitespace-nowrap" style={{ top: 24, left: toP(bookLine) }}>L{bookLine}</span>
       </div>
       <div className="w-12 shrink-0 text-right">
         <p className="text-xs font-bold" style={{ color }}>{(Math.round(pitcher.salci.expectedKs * 10) / 10).toFixed(1)} K</p>
-        {pitcher.salci.recommendOver && <p className="text-[9px] text-emerald-400">✓ OVER</p>}
+        {pitcher.salci.recommendOver && <p className="text-[9px] text-emerald-400">OVER</p>}
       </div>
     </div>
   );
 };
 
-// ─── main page ────────────────────────────────────────────────────────────────
+// ── main page ──────────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
   const [tab, setTab] = useState<'teams' | 'compare' | 'parlay'>('teams');
@@ -167,11 +159,12 @@ export default function AnalyticsPage() {
   const [chartType, setChartType] = useState<'bar' | 'scatter'>('bar');
   const [metric, setMetric] = useState<PitchingMetric>('kPct');
   const [range, setRange] = useState<DateRange>('season');
-  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set());
+  const [highlightedTeams, setHighlightedTeams] = useState<Set<string>>(new Set());
   const [focusTeam, setFocusTeam] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [search, setSearch] = useState('');
 
-  // Pitchers (shared by Compare + Parlay + Teams drill-down)
+  // Pitchers
   const [pitchers, setPitchers] = useState<Pitcher[]>([]);
   const [pitchersLoading, setPitchersLoading] = useState(false);
   const [pitchersFetched, setPitchersFetched] = useState(false);
@@ -184,25 +177,15 @@ export default function AnalyticsPage() {
 
   // ── data fetching ─────────────────────────────────────────────────────────
 
-  // Single effect for team stats — fires on mount and whenever range changes.
-  // Uses functional setSelectedTeams so prev is always current, not stale closure.
   useEffect(() => {
     setTeamsLoading(true);
     fetch(`/api/analytics/team-pitching?range=${range}`)
       .then((res) => res.json() as Promise<{ teams: TeamPitchingStats[] }>)
-      .then(({ teams }) => {
-        setAllTeams(teams);
-        setSelectedTeams((prev) =>
-          prev.size === 0
-            ? new Set([...teams].sort((a, b) => b.kPct - a.kPct).slice(0, 5).map((t) => t.abbr))
-            : prev
-        );
-      })
+      .then(({ teams }) => setAllTeams(teams))
       .catch(() => {})
       .finally(() => setTeamsLoading(false));
   }, [range]);
 
-  // L14 trend data — mount only
   useEffect(() => {
     fetch('/api/analytics/team-pitching?range=14d')
       .then((res) => res.json() as Promise<{ teams: TeamPitchingStats[] }>)
@@ -238,8 +221,13 @@ export default function AnalyticsPage() {
     return [...allTeams].sort((a, b) => m.lowerIsBetter ? a[metric] - b[metric] : b[metric] - a[metric]);
   }, [allTeams, metric]);
 
-  // Bar chart always shows all teams — chips are a highlight tool, not a filter
-  const chartTeams = sortedTeams;
+  const filteredChips = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sortedTeams;
+    return sortedTeams.filter((t) =>
+      t.abbr.toLowerCase().includes(q) || t.team.toLowerCase().includes(q)
+    );
+  }, [sortedTeams, search]);
 
   const scatterData = useMemo(() =>
     allTeams.map((t) => ({ x: t.kPct, y: t.era, z: Math.max(t.inningsPitched, 10), abbr: t.abbr, team: t.team })),
@@ -261,10 +249,7 @@ export default function AnalyticsPage() {
     [pitchers, compareSelected]
   );
 
-  const overPitchers = useMemo(() =>
-    pitchers.filter((p) => p.salci.recommendOver),
-    [pitchers]
-  );
+  const overPitchers = useMemo(() => pitchers.filter((p) => p.salci.recommendOver), [pitchers]);
 
   const selectedParlayPitchers = useMemo(() =>
     overPitchers.filter((p) => parlaySelected.has(p.id)),
@@ -290,13 +275,29 @@ export default function AnalyticsPage() {
     return <Minus size={10} className="text-zinc-600" />;
   };
 
-  const handleTeamClick = (abbr: string) => {
+  const toggleHighlight = (abbr: string) => {
+    setHighlightedTeams((prev) => {
+      const next = new Set(prev);
+      if (next.has(abbr)) next.delete(abbr);
+      else next.add(abbr);
+      return next;
+    });
+  };
+
+  const handleBarClick = (d: unknown) => {
+    const abbr = (d as TeamPitchingStats).abbr;
     const newFocus = focusTeam === abbr ? null : abbr;
     setFocusTeam(newFocus);
     if (newFocus) fetchPitchers();
   };
 
   const displayTeams = showAll ? sortedTeams : sortedTeams.slice(0, 15);
+
+  // Bar fill: if any team is highlighted, highlighted = emerald, others = muted
+  const barFill = (abbr: string) => {
+    if (highlightedTeams.size === 0) return '#34d399';
+    return highlightedTeams.has(abbr) ? '#34d399' : '#3f3f46';
+  };
 
   // ── render ────────────────────────────────────────────────────────────────
 
@@ -305,7 +306,7 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight text-zinc-100 md:text-3xl">Analytics Explorer</h1>
-        <p className="text-sm text-zinc-500">MLB pitching analytics — interactive comparison and parlay tools</p>
+        <p className="text-sm text-zinc-500">MLB pitching analytics — all 30 teams, live data</p>
       </div>
 
       {/* Tab bar */}
@@ -324,10 +325,10 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      {/* ── TEAMS TAB ──────────────────────────────────────────────────────── */}
+      {/* ── TEAMS TAB ────────────────────────────────────────────────────── */}
       {tab === 'teams' && (
         <div className="flex flex-col gap-6">
-          {/* Filters */}
+          {/* Filters row */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1 rounded-lg bg-zinc-900 border border-zinc-800 p-1">
               {METRICS.map((m) => (
@@ -371,26 +372,39 @@ export default function AnalyticsPage() {
                   <div>
                     <p className="text-sm font-semibold text-zinc-200">{currentMetric.desc}</p>
                     <p className="text-xs text-zinc-500">
-                      League avg: {METRIC_FMT[metric](leagueAvg)} · {currentMetric.lowerIsBetter ? 'Lower is better' : 'Higher is better'}
+                      {allTeams.length} teams · League avg: {METRIC_FMT[metric](leagueAvg)}
+                      {' '}· {currentMetric.lowerIsBetter ? 'Lower is better' : 'Higher is better'}
+                      {highlightedTeams.size > 0 && (
+                        <button onClick={() => setHighlightedTeams(new Set())} className="ml-2 text-zinc-600 hover:text-zinc-400 underline underline-offset-2">
+                          clear highlights
+                        </button>
+                      )}
                     </p>
                   </div>
                   {chartType === 'scatter' && (
-                    <p className="text-xs text-zinc-600">X = K%  ·  Y = ERA  ·  Click team to drill down</p>
+                    <p className="text-xs text-zinc-600">X = K%  ·  Y = ERA  ·  Click to drill down</p>
                   )}
                 </div>
 
                 {chartType === 'bar' ? (
-                  <ResponsiveContainer width="100%" height={296}>
-                    <BarChart data={chartTeams} margin={{ top: 8, right: 8, bottom: 16, left: -8 }}>
-                      <XAxis dataKey="abbr" tick={XAxisTickWithLogo} axisLine={false} tickLine={false} interval={0} />
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={sortedTeams} margin={{ top: 8, right: 4, bottom: 20, left: -8 }}>
+                      <XAxis
+                        dataKey="abbr"
+                        tick={XAxisLogoTick}
+                        axisLine={false}
+                        tickLine={false}
+                        interval={0}
+                        height={26}
+                      />
                       <YAxis tick={{ fontSize: 10, fill: '#71717a' }} axisLine={false} tickLine={false}
                         tickFormatter={(v: number) => METRIC_FMT[metric](v)} />
                       <Tooltip content={<BarTooltip metric={metric} />} cursor={{ fill: '#ffffff06' }} />
                       <ReferenceLine y={leagueAvg} stroke="#52525b" strokeDasharray="4 3"
                         label={{ value: 'Avg', position: 'insideTopRight', fill: '#52525b', fontSize: 10 }} />
-                      <Bar dataKey={metric} radius={[5, 5, 0, 0]} onClick={(d: unknown) => handleTeamClick((d as TeamPitchingStats).abbr)}>
-                        {chartTeams.map((team, i) => (
-                          <Cell key={team.abbr} fill={focusTeam === team.abbr ? '#34d399' : CHART_COLORS[i % CHART_COLORS.length]} />
+                      <Bar dataKey={metric} radius={[4, 4, 0, 0]} onClick={handleBarClick} style={{ cursor: 'pointer' }}>
+                        {sortedTeams.map((team) => (
+                          <Cell key={team.abbr} fill={barFill(team.abbr)} fillOpacity={highlightedTeams.size > 0 && !highlightedTeams.has(team.abbr) ? 0.35 : 1} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -415,39 +429,55 @@ export default function AnalyticsPage() {
                       <Scatter
                         data={scatterData}
                         shape={<TeamLogoDot />}
-                        onClick={(d: unknown) => handleTeamClick((d as ScatterPoint).abbr)}
+                        onClick={(d: unknown) => handleBarClick(d as TeamPitchingStats)}
                       />
                     </ScatterChart>
                   </ResponsiveContainer>
                 )}
               </div>
 
-              {/* Team chips with trend badges */}
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
-                  {chartType === 'bar' ? 'Click team to highlight' : 'Click team to drill down pitchers'}
-                  {focusTeam && <span className="ml-2 text-emerald-400">Showing {focusTeam} pitchers ↓</span>}
-                </p>
+              {/* Search + team highlight chips */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1 max-w-xs">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search teams (e.g. SEA, Yankees...)"
+                      className="w-full rounded-lg border border-zinc-800 bg-zinc-900 pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-700"
+                    />
+                  </div>
+                  <p className="text-xs text-zinc-600">
+                    Click to highlight · Bar click to drill down
+                    {focusTeam && <span className="ml-2 text-emerald-400">Showing {focusTeam} pitchers below</span>}
+                  </p>
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  {sortedTeams.map((team) => {
-                    const isFocused = focusTeam === team.abbr;
+                  {filteredChips.map((team) => {
+                    const isHighlighted = highlightedTeams.has(team.abbr);
                     return (
-                      <button key={team.abbr}
-                        onClick={() => handleTeamClick(team.abbr)}
+                      <button
+                        key={team.abbr}
+                        onClick={() => toggleHighlight(team.abbr)}
                         className={clsx(
                           'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
-                          isFocused
+                          isHighlighted
                             ? 'border-emerald-400 bg-emerald-500/15 text-emerald-300'
                             : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
                         )}
                       >
-                        <TeamLogo abbr={team.abbr} size={14} />
+                        <TeamLogo abbr={team.abbr} size={14} darkBg={false} />
                         {team.abbr}
                         {trendBadge(team.abbr)}
                         <span className="text-zinc-600">{METRIC_FMT[metric](team[metric])}</span>
                       </button>
                     );
                   })}
+                  {filteredChips.length === 0 && search && (
+                    <p className="text-xs text-zinc-600 py-1">No teams match &quot;{search}&quot;</p>
+                  )}
                 </div>
               </div>
 
@@ -509,13 +539,13 @@ export default function AnalyticsPage() {
                       {displayTeams.map((team, i) => (
                         <tr key={team.abbr}
                           className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors cursor-pointer"
-                          onClick={() => handleTeamClick(team.abbr)}>
+                          onClick={() => { toggleHighlight(team.abbr); handleBarClick(team); }}>
                           <td className="px-4 py-2.5 text-xs text-zinc-600">{i + 1}</td>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2">
-                              <TeamLogo abbr={team.abbr} size={16} />
+                              <TeamLogo abbr={team.abbr} size={16} darkBg={false} />
                               <span className={clsx('text-xs font-semibold',
-                                focusTeam === team.abbr ? 'text-emerald-400' : 'text-zinc-300')}>
+                                highlightedTeams.has(team.abbr) ? 'text-emerald-400' : 'text-zinc-300')}>
                                 {team.abbr}
                               </span>
                             </div>
@@ -545,7 +575,7 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* ── COMPARE TAB ───────────────────────────────────────────────────── */}
+      {/* ── COMPARE TAB ──────────────────────────────────────────────────── */}
       {tab === 'compare' && (
         <div className="flex flex-col gap-6">
           {pitchersLoading ? (
@@ -553,11 +583,10 @@ export default function AnalyticsPage() {
           ) : pitchers.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 py-20">
               <p className="text-zinc-400 font-medium">No pitcher data available</p>
-              <p className="text-sm text-zinc-600">Pipeline must run first to populate today's SALCI scores</p>
+              <p className="text-sm text-zinc-600">Pipeline must run first to populate today&apos;s SALCI scores</p>
             </div>
           ) : (
             <>
-              {/* Best bet card */}
               {bestBet && (
                 <div className="flex items-center gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
                   <Star className="shrink-0 text-emerald-400" size={20} />
@@ -570,14 +599,12 @@ export default function AnalyticsPage() {
                     </p>
                     <p className="text-xs text-zinc-500 mt-0.5">
                       Floor {bestBet.salci.floor} · Expected {(Math.round(bestBet.salci.expectedKs * 10) / 10).toFixed(1)} · Ceiling {bestBet.salci.ceiling}
-                      {' '}· Highest floor-to-line spread among OVER picks
                     </p>
                   </div>
                   <ArrowUpRight className="shrink-0 text-emerald-400" size={16} />
                 </div>
               )}
 
-              {/* Pitcher selector */}
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
                   Select up to 4 pitchers to compare
@@ -604,7 +631,7 @@ export default function AnalyticsPage() {
                           'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
                         )}
                       >
-                        <TeamLogo abbr={p.team} size={14} />
+                        <TeamLogo abbr={p.team} size={14} darkBg={false} />
                         {p.name.split(' ').pop()}
                         <span className={clsx('font-bold', GRADE_COLORS[p.salci.grade])}>{p.salci.grade}</span>
                       </button>
@@ -615,13 +642,10 @@ export default function AnalyticsPage() {
 
               {selectedComparePitchers.length >= 2 ? (
                 <>
-                  {/* Radar chart */}
                   <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
                     <p className="text-sm font-semibold text-zinc-200 mb-4">SALCI Component Comparison</p>
                     <RadarCompare pitchers={selectedComparePitchers} />
                   </div>
-
-                  {/* Range bars */}
                   <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
                     <p className="text-sm font-semibold text-zinc-200 mb-4">K Projection Ranges</p>
                     <div className="flex flex-col gap-4">
@@ -641,7 +665,7 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* ── PARLAY BUILDER TAB ────────────────────────────────────────────── */}
+      {/* ── PARLAY TAB ───────────────────────────────────────────────────── */}
       {tab === 'parlay' && (
         <div className="flex flex-col gap-6">
           {pitchersLoading ? (
@@ -659,12 +683,9 @@ export default function AnalyticsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {/* Pick list */}
               <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-zinc-200">
-                    OVER Picks ({overPitchers.length})
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-200">OVER Picks ({overPitchers.length})</p>
                   <p className="text-xs text-zinc-500">Select 2–4 for parlay card</p>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -681,10 +702,7 @@ export default function AnalyticsPage() {
                           'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
                         )}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={isDisabled}
+                        <input type="checkbox" checked={isChecked} disabled={isDisabled}
                           onChange={() => {
                             if (isDisabled) return;
                             setParlaySelected((prev) => {
@@ -695,7 +713,7 @@ export default function AnalyticsPage() {
                           }}
                           className="w-4 h-4 accent-emerald-500"
                         />
-                        <TeamLogo abbr={p.team} size={28} className="shrink-0" />
+                        <TeamLogo abbr={p.team} size={28} darkBg={false} className="shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="font-semibold text-sm text-zinc-100 truncate">{p.name}</p>
@@ -703,17 +721,11 @@ export default function AnalyticsPage() {
                               {p.salci.grade}
                             </span>
                           </div>
-                          <p className="text-xs text-zinc-500 mt-0.5">
-                            {p.team} {p.isHome ? 'vs' : '@'} {p.opponent}
-                          </p>
+                          <p className="text-xs text-zinc-500 mt-0.5">{p.team} {p.isHome ? 'vs' : '@'} {p.opponent}</p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-xs text-zinc-500">
-                            {p.salci.floor}–{p.salci.ceiling} Ks
-                          </p>
-                          <p className="text-xs font-semibold text-emerald-400">
-                            +{edge.toFixed(1)} edge
-                          </p>
+                          <p className="text-xs text-zinc-500">{p.salci.floor}–{p.salci.ceiling} Ks</p>
+                          <p className="text-xs font-semibold text-emerald-400">+{edge.toFixed(1)} edge</p>
                         </div>
                       </label>
                     );
@@ -721,7 +733,6 @@ export default function AnalyticsPage() {
                 </div>
               </div>
 
-              {/* Parlay card generator */}
               <div className="flex flex-col gap-4">
                 <p className="text-sm font-semibold text-zinc-200">
                   Parlay Card {parlaySelected.size > 0 ? `(${parlaySelected.size} picks)` : ''}
@@ -744,4 +755,3 @@ export default function AnalyticsPage() {
     </div>
   );
 }
-

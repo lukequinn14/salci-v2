@@ -58,6 +58,11 @@ export const getTeamLogoUrl = (abbr: string, darkBg = false): string => {
   if (!abbr) return '';
   const resolved = ABBREV_ALIASES[abbr] ?? ABBREV_ALIASES[abbr.toUpperCase()] ?? abbr;
   const upper = resolved.toUpperCase();
+
+  if (!ESPN_SLUG[upper] && !ABBREV_ALIASES[upper]) {
+    console.warn('[Logo] Unknown abbr:', abbr, '→ upper:', upper);
+  }
+
   const override = URL_OVERRIDES[upper];
   if (override) return darkBg ? override.dark : override.standard;
 

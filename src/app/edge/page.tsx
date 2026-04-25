@@ -248,11 +248,14 @@ export default function EdgeHubPage() {
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 flex flex-col gap-3">
               {sorted.map((p) => {
                 const color = barColor(p.salci.buffer);
-                const maxKs = 15;
-                const barPct = Math.min(100, (p.salci.expectedKs / maxKs) * 100);
-                const floorPct = Math.min(96, (p.salci.floor / maxKs) * 100);
-                const ceilPct = Math.min(96, (p.salci.ceiling / maxKs) * 100);
-                const linePct = Math.min(99, (BOOK_LINE / maxKs) * 100);
+                const chartMin = Math.max(0, p.salci.floor - 1);
+                const chartMax = p.salci.ceiling + 1;
+                const span = Math.max(1, chartMax - chartMin);
+                const toPct = (v: number) => Math.max(0, Math.min(100, ((v - chartMin) / span) * 100));
+                const barPct = toPct(p.salci.expectedKs);
+                const floorPct = toPct(p.salci.floor);
+                const ceilPct = toPct(p.salci.ceiling);
+                const linePct = toPct(BOOK_LINE);
                 return (
                   <div key={p.id} className="flex items-center gap-3">
                     <div className="w-36 shrink-0 flex items-center gap-2">
