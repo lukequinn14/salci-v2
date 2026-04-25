@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Home, TrendingUp, Users, BarChart2, Zap, FlaskConical, LogOut, Crown } from 'lucide-react';
+import { Home, TrendingUp, Users, BarChart2, Zap, FlaskConical, LogOut, Crown, Target } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { LucideIcon } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
@@ -19,6 +19,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/', label: 'Home', icon: Home },
+  { href: '/picks', label: 'Picks', icon: Target },
   { href: '/pitchers', label: 'Pitchers', icon: TrendingUp },
   { href: '/hitters', label: 'Hitters', icon: Users },
   { href: '/analytics', label: 'Analytics', icon: BarChart2 },
@@ -31,6 +32,14 @@ const Nav = () => {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [tier, setTier] = useState<SubscriptionTier>('free');
+  const [overCount, setOverCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/picks/count')
+      .then((r) => r.json() as Promise<{ count: number }>)
+      .then(({ count }) => { if (count > 0) setOverCount(count); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -96,6 +105,11 @@ const Nav = () => {
                 >
                   <Icon size={15} />
                   {label}
+                  {href === '/picks' && overCount !== null && (
+                    <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 ring-1 ring-emerald-500/30">
+                      {overCount}
+                    </span>
+                  )}
                   {badge && (
                     <span className="rounded px-1 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30">
                       {badge}
@@ -137,21 +151,26 @@ const Nav = () => {
 
       {/* Mobile bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm md:hidden">
-        <div className="grid grid-cols-6">
+        <div className="grid grid-cols-7">
           {navItems.map(({ href, label, icon: Icon, badge }) => (
             <Link
               key={href}
               href={href}
               className={clsx(
-                'flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors',
+                'flex flex-col items-center gap-0.5 py-2 text-[9px] font-medium transition-colors',
                 pathname === href
                   ? 'text-emerald-400'
                   : 'text-zinc-500 hover:text-zinc-300'
               )}
             >
               <div className="relative">
-                <Icon size={18} />
-                {badge && (
+                <Icon size={16} />
+                {href === '/picks' && overCount !== null && (
+                  <span className="absolute -top-1 -right-2.5 rounded-full bg-emerald-500 px-1 text-[7px] font-bold text-zinc-950 leading-tight">
+                    {overCount}
+                  </span>
+                )}
+                {badge && !overCount && (
                   <span className="absolute -top-1 -right-2 rounded px-0.5 text-[7px] font-bold bg-amber-500/20 text-amber-400">
                     P
                   </span>
