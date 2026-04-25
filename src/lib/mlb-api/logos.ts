@@ -12,38 +12,38 @@ const DARK_BG_TEAMS = new Set(['COL', 'SD', 'NYY', 'MIN', 'KC', 'PIT', 'MIL', 'C
 // Aliases: alternative abbreviations returned by various MLB API endpoints
 // mapped to the canonical key used in ESPN_SLUG above.
 const ABBREV_ALIASES: Record<string, string> = {
-  // Diamondbacks — schedule API returns AZ, stats API varies
+  // Diamondbacks
   AZ: 'ARI',
-  // White Sox — stats API sometimes returns CHW instead of CWS
+  // White Sox
   CHW: 'CWS',
-  // Royals — Retrosheet/stats API uses KCA
+  // Royals
   KCA: 'KC',
-  // Rays — stats API sometimes uses TBR
+  // Rays
   TBR: 'TB',
-  // Nationals — stats API sometimes uses WAS
+  // Nationals — stats API uses WAS or WSN
   WAS: 'WSH',
-  // Padres — stats API sometimes uses SDP
+  WSN: 'WSH',
+  // Padres
   SDP: 'SD',
-  // Giants — stats API sometimes uses SFG
+  // Giants
   SFG: 'SF',
-  // Indians/Guardians — stats API may use CLE or CLG
+  // Guardians
   CLG: 'CLE',
-  // Athletics — Sacramento move may produce ATH or LVA
+  // Athletics
   ATH: 'OAK',
   LVA: 'OAK',
-  // Cardinals — sometimes SLN
+  // Cardinals
   SLN: 'STL',
-  // Cubs — sometimes CHN
+  // Cubs
   CHN: 'CHC',
-  // Astros — sometimes HOU is fine, but HOU alias just in case
-  // Brewers — sometimes MIL is returned as MIL, fine
-  // Mets — sometimes NYN
+  // Mets
   NYN: 'NYM',
-  // Yankees — sometimes NYA
+  // Yankees
   NYA: 'NYY',
-  // Blue Jays — sometimes TOR, fine
-  // Tigers — sometimes DET, fine
-  // Rangers — sometimes TEX, fine
+  // Marlins — stats API sometimes uses FLA
+  FLA: 'MIA',
+  // Brewers — stats API sometimes uses MIL (fine) or BRE
+  // Blue Jays — stats API sometimes uses TOR (fine)
 };
 
 // Explicit URL overrides for teams where the standard scoreboard path is unreliable

@@ -212,6 +212,19 @@ export interface RawTeamStats {
   gamesPlayed: number;
 }
 
+// Normalize MLB Stats API team abbreviations to canonical ESPN-compatible form.
+// The stats endpoint uses Retrosheet-style codes that differ from the schedule endpoint.
+const STATS_ABBR_ALIASES: Record<string, string> = {
+  AZ: 'ARI', CHW: 'CWS', KCA: 'KC', TBR: 'TB',
+  WAS: 'WSH', WSN: 'WSH', SDP: 'SD', SFG: 'SF',
+  CLG: 'CLE', ATH: 'OAK', LVA: 'OAK',
+  SLN: 'STL', CHN: 'CHC', NYN: 'NYM', NYA: 'NYY', FLA: 'MIA',
+};
+const normalizeTeamAbbr = (abbr: string): string => {
+  const u = abbr.toUpperCase();
+  return STATS_ABBR_ALIASES[u] ?? u;
+};
+
 const parseIP = (ip: string | undefined): number => {
   if (!ip) return 0;
   const [whole, thirds] = ip.split('.').map(Number);
@@ -245,7 +258,8 @@ export const getAllTeamPitchingStats = async (
 
   for (const split of splits) {
     if (!split.team) continue;
-    const { id, name, abbreviation } = split.team;
+    const { id, name, abbreviation: rawAbbr } = split.team;
+    const abbreviation = normalizeTeamAbbr(rawAbbr ?? '');
     const s = split.stat;
     const ip = parseIP(s.inningsPitched);
     if (ip === 0) continue;
